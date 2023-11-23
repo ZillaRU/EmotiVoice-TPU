@@ -4,6 +4,7 @@ model_file/*.npy
 model_file/*.pth
 model_file/*.pt
 debug
+*.pyc
 */__pycache__
 tmp
 WangZeJun

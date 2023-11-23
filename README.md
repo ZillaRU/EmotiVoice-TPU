@@ -1,3 +1,6 @@
+## Download bmodels and put them in `./model_file`
+https://disk.sophgo.vip/sharing/tHTHGszRg
+
 <font size=4> README: EN | <a href="./README.zh.md">中文</a>  </font>
 
 

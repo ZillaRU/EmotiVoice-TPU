@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from models.prompt_tts_modified.jets import JETSGenerator
 from models.prompt_tts_modified.simbert import StyleEncoder
 from transformers import AutoTokenizer
@@ -22,25 +21,36 @@ import soundfile as sf
 from yacs import config as CONFIG
 from tqdm import tqdm
 
-def get_style_embedding(prompt, tokenizer, style_encoder):
-    prompt = tokenizer([prompt], return_tensors="pt")
+def get_style_embedding(prompt_text, tokenizer, style_encoder):
+    prompt = tokenizer([prompt_text], padding='max_length', truncation=True, max_length=512, return_tensors="pt")
     input_ids = prompt["input_ids"]
     token_type_ids = prompt["token_type_ids"]
     attention_mask = prompt["attention_mask"]
 
+    # _prompt = tokenizer([prompt_text], return_tensors="pt")
+    # _input_ids = _prompt["input_ids"]
+    # _token_type_ids = _prompt["token_type_ids"]
+    # _attention_mask = _prompt["attention_mask"]
+
     with torch.no_grad():
+        # import pdb; pdb.set_trace()
+        import time; st_time = time.time()
         output = style_encoder(
         input_ids=input_ids,
         token_type_ids=token_type_ids,
         attention_mask=attention_mask,
-    )
-    style_embedding = output["pooled_output"].cpu().squeeze().numpy()
+        # _input_ids=_input_ids,
+        # _token_type_ids=_token_type_ids,
+        # _attention_mask=_attention_mask,
+        )
+        print('====================== BERT time cost:', time.time()-st_time)
+        style_embedding = output["pooled_output"].cpu().squeeze().numpy()
     return style_embedding
 
 def main(args, config):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     root_path = os.path.join(config.output_directory, args.logdir)
     ckpt_path = os.path.join(root_path,  "ckpt")
+    print(ckpt_path)
     files = os.listdir(ckpt_path)
     
     for file in files:
@@ -53,38 +63,23 @@ def main(args, config):
         with open(config.model_config_path, 'r') as fin:
             conf = CONFIG.load_cfg(fin)
         
-     
         conf.n_vocab = config.n_symbols
         conf.n_speaker = config.speaker_n_labels
 
         style_encoder = StyleEncoder(config)
-        model_CKPT = torch.load(config.style_encoder_ckpt, map_location="cpu")
-        model_ckpt = {}
-        for key, value in model_CKPT['model'].items():
-            new_key = key[7:]
-            model_ckpt[new_key] = value
-        style_encoder.load_state_dict(model_ckpt)
 
-
-
-        generator = JETSGenerator(conf).to(device)
-
-        model_CKPT = torch.load(checkpoint_path, map_location=device)
-        generator.load_state_dict(model_CKPT['generator'])
-        generator.eval()
+        generator = JETSGenerator(conf)
 
         with open(config.token_list_path, 'r') as f:
             token2id = {t.strip():idx for idx, t, in enumerate(f.readlines())}
 
         with open(config.speaker2id_path, encoding='utf-8') as f:
             speaker2id = {t.strip():idx for idx, t in enumerate(f.readlines())}
-
-
+        
         tokenizer = AutoTokenizer.from_pretrained(config.bert_path)
         
         text_path = args.test_file
 
-   
         if os.path.exists(root_path + "/test_audio/audio/" +f"{file}/"):
             r = glob.glob(root_path + "/test_audio/audio/" +f"{file}/*")
             for j in r:
@@ -104,6 +99,7 @@ def main(args, config):
         for i, (speaker, prompt, text, content) in enumerate(tqdm(zip(speakers, prompts, texts, contents))):
 
             style_embedding = get_style_embedding(prompt, tokenizer, style_encoder)
+            # import pdb; pdb.set_trace()
             content_embedding = get_style_embedding(content, tokenizer, style_encoder)
 
             if speaker not in speaker2id:
@@ -112,30 +108,27 @@ def main(args, config):
 
             text_int = [token2id[ph] for ph in text]
             
-            sequence = torch.from_numpy(np.array(text_int)).to(device).long().unsqueeze(0)
-            sequence_len = torch.from_numpy(np.array([len(text_int)])).to(device)
-            style_embedding = torch.from_numpy(style_embedding).to(device).unsqueeze(0)
-            content_embedding = torch.from_numpy(content_embedding).to(device).unsqueeze(0)
-            speaker = torch.from_numpy(np.array([speaker])).to(device)
+            sequence = torch.from_numpy(np.array(text_int)).long().unsqueeze(0)
+            sequence_len = torch.from_numpy(np.array([len(text_int)]))
+            style_embedding = torch.from_numpy(style_embedding).unsqueeze(0)
+            content_embedding = torch.from_numpy(content_embedding).unsqueeze(0)
+            speaker = torch.from_numpy(np.array([speaker]))
             with torch.no_grad():
-
+                import time; st_time = time.time()
                 infer_output = generator(
-                        inputs_ling=sequence,
-                        inputs_style_embedding=style_embedding,
-                        input_lengths=sequence_len,
-                        inputs_content_embedding=content_embedding,
-                        inputs_speaker=speaker,
+                        inputs_ling=sequence, # [1, xxx]
+                        inputs_style_embedding=style_embedding, # [1, 768]
+                        input_lengths=sequence_len, # [xxx]
+                        inputs_content_embedding=content_embedding, # [1, 768]
+                        inputs_speaker=speaker, # [x]
                         alpha=1.0
                     )
+                print('====================== Generator time cost:', time.time()-st_time)
                 audio = infer_output["wav_predictions"].squeeze()* MAX_WAV_VALUE
                 audio = audio.cpu().numpy().astype('int16')
                 if not os.path.exists(root_path + "/test_audio/audio/" +f"{file}/"):
                     os.makedirs(root_path + "/test_audio/audio/" +f"{file}/", exist_ok=True)
                 sf.write(file=root_path + "/test_audio/audio/" +f"{file}/{i+1}.wav", data=audio, samplerate=config.sampling_rate) #h.sampling_rate
-
-
-
-
 
 
 if __name__ == '__main__':

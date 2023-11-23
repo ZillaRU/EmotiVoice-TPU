@@ -14,7 +14,7 @@
 
 import torch
 import torch.nn as nn
-
+from .. import EngineOV
 from transformers import AutoModel
 import numpy as np
 
@@ -33,26 +33,34 @@ class ClassificationHead(nn.Module):
 class StyleEncoder(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
-
-        self.bert = AutoModel.from_pretrained(config.bert_path)
-
+        self.bert = EngineOV('./model_file/bert_poolout1-768_1-512_1-512_1-512.bmodel')
+        # self.bert_torch = AutoModel.from_pretrained(config.bert_path)
+        self.bert_max_len = 512
         self.pitch_clf = ClassificationHead(config.bert_hidden_size, config.pitch_n_labels)
         self.speed_clf = ClassificationHead(config.bert_hidden_size, config.speed_n_labels)
         self.energy_clf = ClassificationHead(config.bert_hidden_size, config.energy_n_labels)
         self.emotion_clf = ClassificationHead(config.bert_hidden_size, config.emotion_n_labels)
         self.style_embed_proj = nn.Linear(config.bert_hidden_size, config.style_dim)
-
-        
         
 
-    def forward(self, input_ids, token_type_ids, attention_mask):
+    def forward(self, input_ids, token_type_ids, attention_mask):  #  _input_ids, _token_type_ids, _attention_mask):
+        assert input_ids.shape[1] == self.bert_max_len
         outputs = self.bert(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-        ) # return a dict having ['last_hidden_state', 'pooler_output']
-
-        pooled_output = outputs["pooler_output"]
+            [input_ids.detach().numpy().astype(np.float32),
+            attention_mask.detach().numpy().astype(np.float32),
+            token_type_ids.detach().numpy().astype(np.float32)]
+        )[0] # return a dict having ['last_hidden_state', 'pooler_output']
+        #  outputs["pooler_output"]
+        # import pdb; pdb.set_trace()
+        pooled_output = torch.from_numpy(outputs)
+        
+        # import pdb; pdb.set_trace()
+        # _outputs = self.bert_torch(
+        #     _input_ids,
+        #     attention_mask=_attention_mask,
+        #     token_type_ids=_token_type_ids,
+        # ) 
+        # pooled_output = _outputs["pooler_output"]
 
         pitch_outputs = self.pitch_clf(pooled_output)
         speed_outputs = self.speed_clf(pooled_output)
@@ -68,7 +76,6 @@ class StyleEncoder(nn.Module):
             "emotion_outputs":emotion_outputs,
             # "pred_style_embed":pred_style_embed,
         }
-
         return res
 
 

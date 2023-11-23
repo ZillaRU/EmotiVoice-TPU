@@ -4,7 +4,7 @@ This code is modified from https://github.com/espnet/espnet.
 
 import torch
 import torch.nn as nn
-
+import numpy as np
 
 from models.prompt_tts_modified.modules.encoder import Encoder
 from models.prompt_tts_modified.modules.variance import DurationPredictor, VariancePredictor
@@ -93,14 +93,13 @@ class PromptTTS(nn.Module):
         )
 
 
-        self.spk_tokenizer = nn.Embedding(config.n_speaker, config.model.encoder_n_hidden)
-        self.src_word_emb = nn.Embedding(config.n_vocab, config.model.encoder_n_hidden)
+        self.spk_tokenizer = torch.from_numpy(np.load('./model_file/spk_tokenizer.npy'))  # nn.Embedding(config.n_speaker, config.model.encoder_n_hidden)
+        self.src_word_emb =  torch.from_numpy(np.load('./model_file/src_word_emb.npy')) # nn.Embedding(config.n_vocab, config.model.encoder_n_hidden)
         self.embed_projection1 = nn.Linear(config.model.encoder_n_hidden * 2 + config.model.bert_embedding * 2, config.model.encoder_n_hidden)
 
         initialize(self, "xavier_uniform")
 
     def forward(self, inputs_ling, input_lengths, inputs_speaker, inputs_style_embedding , inputs_content_embedding, mel_targets=None, output_lengths=None, pitch_targets=None, energy_targets=None, alpha=1.0):
-        
         B = inputs_ling.size(0)
         T = inputs_ling.size(1)
         src_mask = self.get_mask_from_lengths(input_lengths)
@@ -109,58 +108,60 @@ class PromptTTS(nn.Module):
         speaker_embedding = self.spk_tokenizer(inputs_speaker)
         x = torch.concat([x, speaker_embedding.unsqueeze(1).expand(B, T, -1), inputs_style_embedding.unsqueeze(1).expand(B, T, -1), inputs_content_embedding.unsqueeze(1).expand(B, T, -1)], dim=-1)
         x = self.embed_projection1(x)
+        
+        # if mel_targets is not None:
+        #     log_p_attn = self.alignment_module(text=x, feats=mel_targets.transpose(1,2), text_lengths=input_lengths, feats_lengths=output_lengths, x_masks=src_mask)
+        #     ds, bin_loss = viterbi_decode(log_p_attn, input_lengths, output_lengths)
 
-        if mel_targets is not None:
-            log_p_attn = self.alignment_module(text=x, feats=mel_targets.transpose(1,2), text_lengths=input_lengths, feats_lengths=output_lengths, x_masks=src_mask)
-            ds, bin_loss = viterbi_decode(log_p_attn, input_lengths, output_lengths)
-
-            ps = average_by_duration(ds, pitch_targets.squeeze(-1), input_lengths, output_lengths)
-            es = average_by_duration(ds, energy_targets.squeeze(-1), input_lengths, output_lengths)
+        #     ps = average_by_duration(ds, pitch_targets.squeeze(-1), input_lengths, output_lengths)
+        #     es = average_by_duration(ds, energy_targets.squeeze(-1), input_lengths, output_lengths)
 
         p_outs = self.pitch_predictor(x, src_mask.unsqueeze(-1))
         e_outs = self.energy_predictor(x, src_mask.unsqueeze(-1))
 
-        if mel_targets is not None:
-            d_outs = self.duration_predictor(x, src_mask.unsqueeze(-1))
-            p_embs = self.pitch_embed(ps.unsqueeze(-1).transpose(1, 2)).transpose(1, 2)
-            e_embs = self.energy_embed(es.unsqueeze(-1).transpose(1, 2)).transpose(1, 2)
+        # if mel_targets is not None:
+        #     d_outs = self.duration_predictor(x, src_mask.unsqueeze(-1))
+        #     p_embs = self.pitch_embed(ps.unsqueeze(-1).transpose(1, 2)).transpose(1, 2)
+        #     e_embs = self.energy_embed(es.unsqueeze(-1).transpose(1, 2)).transpose(1, 2)
 
-        else:
-            log_p_attn, ds, bin_loss, ps, es =None, None, None, None, None
-            d_outs = self.duration_predictor.inference(x, src_mask.unsqueeze(-1))
-            p_embs = self.pitch_embed(p_outs.unsqueeze(1)).transpose(1, 2)
-            e_embs = self.energy_embed(e_outs.unsqueeze(1)).transpose(1, 2)
+        # else:
+        log_p_attn, ds, bin_loss, ps, es =None, None, None, None, None
+        d_outs = self.duration_predictor.inference(x, src_mask.unsqueeze(-1))
+        p_embs = self.pitch_embed(p_outs.unsqueeze(1)).transpose(1, 2)
+        e_embs = self.energy_embed(e_outs.unsqueeze(1)).transpose(1, 2)
 
         x = x + p_embs + e_embs
 
-        if mel_targets is not None:
-            h_masks_upsampling = self.make_non_pad_mask(output_lengths).to(x.device) 
-            x = self.length_regulator(x, ds, h_masks_upsampling, ~src_mask, alpha=alpha)
-            h_masks = self.make_non_pad_mask(output_lengths).unsqueeze(-2).to(x.device)
+        # if mel_targets is not None:
+        #     h_masks_upsampling = self.make_non_pad_mask(output_lengths).to(x.device) 
+        #     x = self.length_regulator(x, ds, h_masks_upsampling, ~src_mask, alpha=alpha)
+        #     h_masks = self.make_non_pad_mask(output_lengths).unsqueeze(-2).to(x.device)
 
-        else:
-            x = self.length_regulator(x, d_outs, None, ~src_mask)
-            mel_lenghs = torch.sum(d_outs, dim=-1).int()
-            # h_masks=make_non_pad_mask(mel_lenghs).unsqueeze(-2).to(x.device)
-            h_masks=None
+        # else:
+            # import pdb; pdb.set_trace()
+        x = self.length_regulator(x, d_outs, None, ~src_mask)
+        mel_lenghs = torch.sum(d_outs, dim=-1).int()
+        # h_masks=make_non_pad_mask(mel_lenghs).unsqueeze(-2).to(x.device)
+        h_masks=None
         x, _ = self.decoder(x, h_masks)
         x = self.to_mel(x)
-        
-        return {
-            "mel_targets":mel_targets,
-            "dec_outputs": x, 
-            "postnet_outputs": None, 
-            "pitch_predictions": p_outs.squeeze(),
-            "pitch_targets": ps,
-            "energy_predictions": e_outs.squeeze(),
-            "energy_targets": es,
-            "log_duration_predictions": d_outs,
-            "duration_targets": ds,
-            "input_lengths": input_lengths,
-            "output_lengths": output_lengths,
-            "log_p_attn": log_p_attn,
-            "bin_loss": bin_loss,
-        }
+        return x
+        # return {
+        #     "mel_targets":mel_targets,
+        #     "dec_outputs": x, 
+        #     "postnet_outputs": None, 
+        #     "pitch_predictions": p_outs.squeeze(),
+        #     "pitch_targets": ps,
+        #     "energy_predictions": e_outs.squeeze(),
+        #     "energy_targets": es,
+        #     "log_duration_predictions": d_outs,
+        #     "duration_targets": ds,
+        #     "input_lengths": input_lengths,
+        #     "output_lengths": output_lengths,
+        #     "log_p_attn": log_p_attn,
+        #     "bin_loss": bin_loss,
+        # }
+    
     def get_mask_from_lengths(self, lengths: torch.Tensor) -> torch.Tensor:
         batch_size = lengths.shape[0]
         max_len = torch.max(lengths).item()
@@ -171,6 +172,7 @@ class PromptTTS(nn.Module):
         )
         mask = ids >= lengths.unsqueeze(1).expand(-1, max_len)
         return mask
+    
     def average_utterance_prosody(
         self, u_prosody_pred: torch.Tensor, src_mask: torch.Tensor
     ) -> torch.Tensor:

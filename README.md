@@ -4,18 +4,21 @@ This repo is a BM1684X-adapted demo of NetEase YouDao EmotiVoice.
 ## 1. Download bmodels and put them in `./model_file`.
 ```sh
 python3 -m pip install dfn
-dfn --url https://disk.sophgo.vip/sharing/KymDuWLGw
+python3 -m dfn --url https://disk.sophgo.vip/sharing/KymDuWLGw
 ```
+Put the three model files in `./model_file`.
+
 ## 2. Then run:
 ```sh
 TEXT=data/inference/text
 python inference_am_vocoder_joint.py \
 --logdir prompt_tts_open_source_joint \
 --config_folder config/joint \
---checkpoint g_00140000 \
 --test_file $TEXT
 ```
-the synthesized speech is under `outputs/prompt_tts_open_source_joint/test_audio`.
+the synthesized speech is under `outputs/prompt_tts_open_source_joint/test_audio/audio`.
+
+## For more detailed usage, please refer to the following description from the original repo of EmotiVoice.
 
 ***
 <font size=4> README: EN | <a href="./README.zh.md">中文</a>  </font>

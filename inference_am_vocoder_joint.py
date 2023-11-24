@@ -49,86 +49,74 @@ def get_style_embedding(prompt_text, tokenizer, style_encoder):
 
 def main(args, config):
     root_path = os.path.join(config.output_directory, args.logdir)
-    ckpt_path = os.path.join(root_path,  "ckpt")
-    print(ckpt_path)
-    files = os.listdir(ckpt_path)
+
+    with open(config.model_config_path, 'r') as fin:
+        conf = CONFIG.load_cfg(fin)
     
-    for file in files:
-        if args.checkpoint:
-            if file != args.checkpoint:
-                continue
+    conf.n_vocab = config.n_symbols
+    conf.n_speaker = config.speaker_n_labels
 
-        checkpoint_path = os.path.join(ckpt_path, file)
+    style_encoder = StyleEncoder(config)
 
-        with open(config.model_config_path, 'r') as fin:
-            conf = CONFIG.load_cfg(fin)
-        
-        conf.n_vocab = config.n_symbols
-        conf.n_speaker = config.speaker_n_labels
+    generator = JETSGenerator(conf)
 
-        style_encoder = StyleEncoder(config)
+    with open(config.token_list_path, 'r') as f:
+        token2id = {t.strip():idx for idx, t, in enumerate(f.readlines())}
 
-        generator = JETSGenerator(conf)
+    with open(config.speaker2id_path, encoding='utf-8') as f:
+        speaker2id = {t.strip():idx for idx, t in enumerate(f.readlines())}
+    
+    tokenizer = AutoTokenizer.from_pretrained(config.bert_path)
+    
+    text_path = args.test_file
 
-        with open(config.token_list_path, 'r') as f:
-            token2id = {t.strip():idx for idx, t, in enumerate(f.readlines())}
-
-        with open(config.speaker2id_path, encoding='utf-8') as f:
-            speaker2id = {t.strip():idx for idx, t in enumerate(f.readlines())}
-        
-        tokenizer = AutoTokenizer.from_pretrained(config.bert_path)
-        
-        text_path = args.test_file
-
-        if os.path.exists(root_path + "/test_audio/audio/" +f"{file}/"):
-            r = glob.glob(root_path + "/test_audio/audio/" +f"{file}/*")
-            for j in r:
-                os.remove(j)
-        texts = []
-        prompts = []
-        speakers = []
-        contents = []
-        with open(text_path, "r") as f:
-            for line in f:
-                line = line.strip().split("|")
-                speakers.append(line[0])
-                prompts.append(line[1])
-                texts.append(line[2].split())
-                contents.append(line[3])
-                
-        for i, (speaker, prompt, text, content) in enumerate(tqdm(zip(speakers, prompts, texts, contents))):
-
-            style_embedding = get_style_embedding(prompt, tokenizer, style_encoder)
-            # import pdb; pdb.set_trace()
-            content_embedding = get_style_embedding(content, tokenizer, style_encoder)
-
-            if speaker not in speaker2id:
-                continue
-            speaker = speaker2id[speaker]
-
-            text_int = [token2id[ph] for ph in text]
+    if os.path.exists(root_path + "/test_audio/audio/"):
+        r = glob.glob(root_path + "/test_audio/audio/*")
+        for j in r:
+            os.remove(j)
+    texts = []
+    prompts = []
+    speakers = []
+    contents = []
+    with open(text_path, "r") as f:
+        for line in f:
+            line = line.strip().split("|")
+            speakers.append(line[0])
+            prompts.append(line[1])
+            texts.append(line[2].split())
+            contents.append(line[3])
             
-            sequence = torch.from_numpy(np.array(text_int)).long().unsqueeze(0)
-            sequence_len = torch.from_numpy(np.array([len(text_int)]))
-            style_embedding = torch.from_numpy(style_embedding).unsqueeze(0)
-            content_embedding = torch.from_numpy(content_embedding).unsqueeze(0)
-            speaker = torch.from_numpy(np.array([speaker]))
-            with torch.no_grad():
-                import time; st_time = time.time()
-                infer_output = generator(
-                        inputs_ling=sequence, # [1, xxx]
-                        inputs_style_embedding=style_embedding, # [1, 768]
-                        input_lengths=sequence_len, # [xxx]
-                        inputs_content_embedding=content_embedding, # [1, 768]
-                        inputs_speaker=speaker, # [x]
-                        alpha=1.0
-                    )
-                print('====================== Generator time cost:', time.time()-st_time)
-                audio = infer_output["wav_predictions"].squeeze()* MAX_WAV_VALUE
-                audio = audio.cpu().numpy().astype('int16')
-                if not os.path.exists(root_path + "/test_audio/audio/" +f"{file}/"):
-                    os.makedirs(root_path + "/test_audio/audio/" +f"{file}/", exist_ok=True)
-                sf.write(file=root_path + "/test_audio/audio/" +f"{file}/{i+1}.wav", data=audio, samplerate=config.sampling_rate) #h.sampling_rate
+    for i, (speaker, prompt, text, content) in enumerate(tqdm(zip(speakers, prompts, texts, contents))):
+
+        style_embedding = get_style_embedding(prompt, tokenizer, style_encoder)
+        # import pdb; pdb.set_trace()
+        content_embedding = get_style_embedding(content, tokenizer, style_encoder)
+
+        if speaker not in speaker2id:
+            continue
+        speaker = speaker2id[speaker]
+
+        text_int = [token2id[ph] for ph in text]
+        
+        sequence = torch.from_numpy(np.array(text_int)).long().unsqueeze(0)
+        sequence_len = torch.from_numpy(np.array([len(text_int)]))
+        style_embedding = torch.from_numpy(style_embedding).unsqueeze(0)
+        content_embedding = torch.from_numpy(content_embedding).unsqueeze(0)
+        speaker = torch.from_numpy(np.array([speaker]))
+        with torch.no_grad():
+            import time; st_time = time.time()
+            infer_output = generator(
+                    inputs_ling=sequence, # [1, xxx]
+                    inputs_style_embedding=style_embedding, # [1, 768]
+                    input_lengths=sequence_len, # [xxx]
+                    inputs_content_embedding=content_embedding, # [1, 768]
+                    inputs_speaker=speaker, # [x]
+                    alpha=1.0
+                )
+            print('====================== Generator time cost:', time.time()-st_time)
+            audio = infer_output["wav_predictions"].squeeze()* MAX_WAV_VALUE
+            audio = audio.cpu().numpy().astype('int16')
+            sf.write(file=root_path + "/test_audio/audio/" +f"{i+1}.wav", data=audio, samplerate=config.sampling_rate) #h.sampling_rate
 
 
 if __name__ == '__main__':
@@ -136,7 +124,7 @@ if __name__ == '__main__':
     p = argparse.ArgumentParser()
     p.add_argument('-d', '--logdir', type=str, required=True)
     p.add_argument("-c", "--config_folder", type=str, required=True)
-    p.add_argument("--checkpoint", type=str, required=False, default='', help='inference specific checkpoint, e.g --checkpoint checkpoint_230000')
+    # p.add_argument("--checkpoint", type=str, required=False, default='', help='inference specific checkpoint, e.g --checkpoint checkpoint_230000')
     p.add_argument('-t', '--test_file', type=str, required=True, help='the absolute path of test file that is going to inference')
 
     args = p.parse_args() 

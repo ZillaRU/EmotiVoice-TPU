@@ -321,4 +321,4 @@ class Encoder(torch.nn.Module):
 
         xs = self.after_norm(xs)
 
-        return xs, masks
+        return xs

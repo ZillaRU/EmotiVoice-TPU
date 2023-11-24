@@ -5,7 +5,7 @@ This code is modified from https://github.com/espnet/espnet.
 import torch
 import torch.nn as nn
 import numpy as np
-
+from .. import EngineOV
 from models.prompt_tts_modified.modules.encoder import Encoder
 from models.prompt_tts_modified.modules.variance import DurationPredictor, VariancePredictor
 from models.prompt_tts_modified.modules.alignment import AlignmentModule, GaussianUpsampling, viterbi_decode, average_by_duration
@@ -15,33 +15,9 @@ class PromptTTS(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
         
-        self.encoder = Encoder(
-            attention_dim=config.model.encoder_n_hidden,
-            attention_heads=config.model.encoder_n_heads,
-            linear_units=config.model.encoder_n_hidden * 4,            
-            num_blocks=config.model.encoder_n_layers,
-            dropout_rate=config.model.encoder_p_dropout,
-            positional_dropout_rate=config.model.encoder_p_dropout,
-            attention_dropout_rate=config.model.encoder_p_dropout,
-            normalize_before=True,
-            concat_after=False,
-            positionwise_conv_kernel_size=config.model.encoder_kernel_size_conv_mod,
-            stochastic_depth_rate=0.0,
-        )
+        self.encoder = EngineOV('./model_file/jit_am_encoder_1-512-384_1-1-512.bmodel')
 
-        self.decoder = Encoder(
-            attention_dim=config.model.decoder_n_hidden,
-            attention_heads=config.model.decoder_n_heads,
-            linear_units=config.model.decoder_n_hidden * 4,            
-            num_blocks=config.model.decoder_n_layers,
-            dropout_rate=config.model.decoder_p_dropout,
-            positional_dropout_rate=config.model.decoder_p_dropout,
-            attention_dropout_rate=config.model.decoder_p_dropout,
-            normalize_before=True,
-            concat_after=False,
-            positionwise_conv_kernel_size=config.model.decoder_kernel_size_conv_mod,
-            stochastic_depth_rate=0.0,
-        )
+        self.decoder = EngineOV('./model_file/onnx_am_decoder_1-2048-384.bmodel')
 
         self.duration_predictor = DurationPredictor(
             idim=config.model.encoder_n_hidden,
@@ -92,37 +68,66 @@ class PromptTTS(nn.Module):
             out_features=config.n_mels,
         )
 
-        self.spk_tokenizer = torch.from_numpy(np.load('./model_file/spk_tokenizer.npy'))  # nn.Embedding(config.n_speaker, config.model.encoder_n_hidden)
-        self.src_word_emb =  torch.from_numpy(np.load('./model_file/src_word_emb.npy')) # nn.Embedding(config.n_vocab, config.model.encoder_n_hidden)
+        self.spk_tokenizer = nn.Embedding(config.n_speaker, config.model.encoder_n_hidden)  # torch.from_numpy(np.load('./model_file/spk_tokenizer.npy'))  # nn.Embedding(config.n_speaker, config.model.encoder_n_hidden)
+        self.src_word_emb =  nn.Embedding(config.n_vocab, config.model.encoder_n_hidden)  # torch.from_numpy(np.load('./model_file/src_word_emb.npy')) # nn.Embedding(config.n_vocab, config.model.encoder_n_hidden)
         self.embed_projection1 = nn.Linear(config.model.encoder_n_hidden * 2 + config.model.bert_embedding * 2, config.model.encoder_n_hidden)
-
-        initialize(self, "xavier_uniform")
-
+        
+        model_para_dict = torch.load('./model_file/am_rest_weight.pth')
+        self.load_my_state_dict(model_para_dict)
+    
+    # inputs_ling [1, seq_len] max:512
+    # inputs_style_embedding [1, 768]
+    # inputs_content_embedding [1,768]
     def forward(self, inputs_ling, input_lengths, inputs_speaker, inputs_style_embedding , inputs_content_embedding, mel_targets=None, output_lengths=None, pitch_targets=None, energy_targets=None, alpha=1.0):
         B = inputs_ling.size(0)
         T = inputs_ling.size(1)
-        src_mask = self.get_mask_from_lengths(input_lengths)
-        token_embed = self.src_word_emb(inputs_ling)
-        x, _ = self.encoder(token_embed, ~src_mask.unsqueeze(-2))
+
+        inputs_ling_pad = torch.cat((inputs_ling, torch.zeros((1, 512-inputs_ling.shape[1]), dtype=torch.int64)), 1)
+        token_embed_pad = self.src_word_emb(inputs_ling_pad)
+        src_mask = self._get_mask_from_lengths(input_lengths)
+        x = self.encoder(
+            [token_embed_pad.numpy().astype(np.float32),
+            (~src_mask.unsqueeze(-2)).numpy().astype(np.float32)]
+        )[0] ############
+        x = torch.from_numpy(x[~src_mask]).unsqueeze(0)
+        # import torch.jit as jit; jit_encoder = jit.trace(self.encoder, (token_embed_pad, ~src_mask.unsqueeze(-2)))
+        # jit.save(jit_encoder, 'model_file/jit_encoder.pt')
+        # torch.onnx.export(self.encoder, (token_embed_pad, ~src_mask.unsqueeze(-2)), 'model_file/am_encoder.onnx')
+        # import pdb; pdb.set_trace()
+        # token_embed = self.src_word_emb(inputs_ling)
+        # src_mask = self.get_mask_from_lengths(input_lengths)
+        # import pdb; pdb.set_trace()
+        # x_gt, _ = self.encoder(token_embed, ~src_mask.unsqueeze(-2)) ############
+        # print(torch.mean(torch.abs(x_gt - x)))
         speaker_embedding = self.spk_tokenizer(inputs_speaker)
         x = torch.concat([x, speaker_embedding.unsqueeze(1).expand(B, T, -1), inputs_style_embedding.unsqueeze(1).expand(B, T, -1), inputs_content_embedding.unsqueeze(1).expand(B, T, -1)], dim=-1)
         x = self.embed_projection1(x)
 
+        src_mask = src_mask[:,:input_lengths[0]]
         p_outs = self.pitch_predictor(x, src_mask.unsqueeze(-1))
         e_outs = self.energy_predictor(x, src_mask.unsqueeze(-1))
-
-        log_p_attn, ds, bin_loss, ps, es =None, None, None, None, None
         d_outs = self.duration_predictor.inference(x, src_mask.unsqueeze(-1))
         p_embs = self.pitch_embed(p_outs.unsqueeze(1)).transpose(1, 2)
         e_embs = self.energy_embed(e_outs.unsqueeze(1)).transpose(1, 2)
-        x = x + p_embs + e_embs
-        x = self.length_regulator(x, d_outs, None, ~src_mask)
-        mel_lenghs = torch.sum(d_outs, dim=-1).int()
-        h_masks=None
-        x, _ = self.decoder(x, h_masks)
+        x = x + p_embs + e_embs # torch.Size([1, 58, 384])
+        x = self.length_regulator(x, d_outs, None, ~src_mask) # torch.Size([1, 340, 384])
+        x_pad = torch.cat((x, torch.zeros((x.shape[0], 2048-x.shape[1], x.shape[2]))), axis=1)
+        x_pad = torch.from_numpy(self.decoder([x_pad.numpy().astype(np.float32)])[0])
+        x = x_pad[:, :x.shape[1], :]
         x = self.to_mel(x)
         return x
-    
+
+    def _get_mask_from_lengths(self, lengths: torch.Tensor) -> torch.Tensor:
+        batch_size = lengths.shape[0]
+        max_len = 512
+        ids = (
+            torch.arange(0, max_len, device=lengths.device)
+            .unsqueeze(0)
+            .expand(batch_size, -1)
+        )
+        mask = ids >= lengths.unsqueeze(1).expand(-1, max_len)
+        return mask
+
     def get_mask_from_lengths(self, lengths: torch.Tensor) -> torch.Tensor:
         batch_size = lengths.shape[0]
         max_len = torch.max(lengths).item()
@@ -140,13 +145,14 @@ class PromptTTS(nn.Module):
         lengths = ((~src_mask) * 1.0).sum(1)
         u_prosody_pred = u_prosody_pred.sum(1, keepdim=True) / lengths.view(-1, 1, 1)
         return u_prosody_pred
+    
     def load_my_state_dict(self, state_dict):
- 
         own_state = self.state_dict()
         for name, param in state_dict.items():
             if name not in own_state:
                  continue
             if isinstance(param, torch.nn.Parameter):
+                print(name, ":", param)
                 # backwards compatibility for serialized parameters
                 param = param.data
             try:

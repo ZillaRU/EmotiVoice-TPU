@@ -19,21 +19,10 @@ class PromptTTS(nn.Module):
 
         self.decoder = EngineOV('./model_file/onnx_am_decoder_1-2048-384.bmodel')
 
-        self.duration_predictor = DurationPredictor(
-            idim=config.model.encoder_n_hidden,
-            n_layers=config.model.duration_n_layers,
-            n_chans=config.model.variance_n_hidden,
-            kernel_size=config.model.duration_kernel_size,
-            dropout_rate=config.model.duration_p_dropout,
-        )
+        self.duration_predictor = EngineOV('./model_file/am_durationpred-1_512_384-1_512_1.bmodel')
 
-        self.pitch_predictor = VariancePredictor(
-            idim=config.model.encoder_n_hidden,
-            n_layers=config.model.variance_n_layers, #pitch_predictor_layers=5 in paddlespeech fs2
-            n_chans=config.model.variance_n_hidden,
-            kernel_size=config.model.variance_kernel_size, #pitch_predictor_kernel_size=5 in paddlespeech fs2
-            dropout_rate=config.model.variance_p_dropout, #pitch_predictor_dropout=0.5 in paddlespeech fs2
-        )
+        self.pitch_predictor = EngineOV('./model_file/am_pitchpred-1_512_384-1_512_1.bmodel')
+
         self.pitch_embed = torch.nn.Sequential(
             torch.nn.Conv1d(
                 in_channels=1,
@@ -43,13 +32,8 @@ class PromptTTS(nn.Module):
             ),
             torch.nn.Dropout(config.model.variance_embde_p_dropout), #pitch_embed_dropout=0.0
         )
-        self.energy_predictor = VariancePredictor(
-            idim=config.model.encoder_n_hidden,
-            n_layers=2,
-            n_chans=config.model.variance_n_hidden,
-            kernel_size=3,
-            dropout_rate=config.model.variance_p_dropout,
-        )
+        self.energy_predictor = EngineOV('./model_file/am_energypred-1_512_384-1_512_1.bmodel')
+
         self.energy_embed = torch.nn.Sequential(
             torch.nn.Conv1d(
                 in_channels=1,
@@ -81,6 +65,7 @@ class PromptTTS(nn.Module):
     def forward(self, inputs_ling, input_lengths, inputs_speaker, inputs_style_embedding , inputs_content_embedding, mel_targets=None, output_lengths=None, pitch_targets=None, energy_targets=None, alpha=1.0):
         B = inputs_ling.size(0)
         T = inputs_ling.size(1)
+        _T = 512
         inputs_ling_pad = torch.cat((inputs_ling, torch.zeros((1, 512-inputs_ling.shape[1]), dtype=torch.int64)), 1)
         token_embed_pad = self.src_word_emb(inputs_ling_pad)
         src_mask = self._get_mask_from_lengths(input_lengths)
@@ -89,6 +74,7 @@ class PromptTTS(nn.Module):
             (~src_mask.unsqueeze(-2)).numpy().astype(np.float32)]
         )[0] ############
         x = torch.from_numpy(x[~src_mask]).unsqueeze(0)
+        # x = torch.from_numpy(x) # .unsqueeze(0)
         # import torch.jit as jit; jit_encoder = jit.trace(self.encoder, (token_embed_pad, ~src_mask.unsqueeze(-2)))
         # jit.save(jit_encoder, 'model_file/jit_encoder.pt')
         # torch.onnx.export(self.encoder, (token_embed_pad, ~src_mask.unsqueeze(-2)), 'model_file/am_encoder.onnx')
@@ -101,20 +87,27 @@ class PromptTTS(nn.Module):
         speaker_embedding = self.spk_tokenizer(inputs_speaker)
         x = torch.concat([x, speaker_embedding.unsqueeze(1).expand(B, T, -1), inputs_style_embedding.unsqueeze(1).expand(B, T, -1), inputs_content_embedding.unsqueeze(1).expand(B, T, -1)], dim=-1)
         x = self.embed_projection1(x)
-
-
-        import pdb; pdb.set_trace()
-        src_mask = src_mask[:,:input_lengths[0]]
-
-        # p_outs = self.pitch_predictor(x, src_mask.unsqueeze(-1))
-        # e_outs = self.energy_predictor(x, src_mask.unsqueeze(-1))
-        # d_outs = self.duration_predictor.inference(x, src_mask.unsqueeze(-1))
-        d_outs = self.duration_predictor(x, src_mask.unsqueeze(-1))
+        x = x.numpy()
+        x = np.concatenate([x, np.zeros((1, _T-x.shape[1], x.shape[-1]))], axis=1).astype(np.float32)
+        temp_src_mask = src_mask.unsqueeze(-1).numpy().astype(np.float32)
+        # import pdb; pdb.set_trace()
+        p_outs = torch.from_numpy(self.pitch_predictor([x, temp_src_mask])[0])
+        e_outs = torch.from_numpy(self.energy_predictor([x, temp_src_mask])[0])
+        d_outs = torch.from_numpy(self.duration_predictor([x, temp_src_mask])[0])
+        d_outs = torch.clamp(torch.round(d_outs.exp() - 1.0), min=0).long()  # self.offset = 1.0avoid negative value
         
+        src_mask = src_mask[:,:input_lengths[0]]
+        x = x[:, :input_lengths[0], :]
+        p_outs = p_outs[:,:input_lengths[0]]
+        e_outs = e_outs[:,:input_lengths[0]]
+        d_outs = d_outs[:,:input_lengths[0]]
+
         p_embs = self.pitch_embed(p_outs.unsqueeze(1)).transpose(1, 2)
         e_embs = self.energy_embed(e_outs.unsqueeze(1)).transpose(1, 2)
-        x = x + p_embs + e_embs # torch.Size([1, 58, 384])
+        x = torch.from_numpy(x) + p_embs + e_embs # torch.Size([1, 58, 384])
+        import pdb; pdb.set_trace()
         x = self.length_regulator(x, d_outs, None, ~src_mask) # torch.Size([1, 340, 384])
+        # x = x[~src_mask]
         x_pad = torch.cat((x, torch.zeros((x.shape[0], 2048-x.shape[1], x.shape[2]))), axis=1)
         x_pad = torch.from_numpy(self.decoder([x_pad.numpy().astype(np.float32)])[0])
         x = x_pad[:, :x.shape[1], :]

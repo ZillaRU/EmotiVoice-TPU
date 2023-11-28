@@ -11,7 +11,7 @@ Put the three model files in `./model_file`.
 ## 2. Then run:
 ```sh
 TEXT=data/inference/text
-python inference_am_vocoder_joint.py \
+python3 inference_am_vocoder_joint.py \
 --logdir prompt_tts_open_source_joint \
 --config_folder config/joint \
 --test_file $TEXT

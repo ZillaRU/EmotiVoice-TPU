@@ -55,12 +55,15 @@ class DurationPredictor(torch.nn.Module):
 
         return xs.squeeze(-1)
 
-    def forward(self, xs, x_masks=None):
+    def ori_forward(self, xs, x_masks=None):
 
         return self._forward(xs, x_masks, False)
 
     def inference(self, xs, x_masks=None):
 
+        return self._forward(xs, x_masks, True)
+
+    def forward(self, xs, x_masks=None):
         return self._forward(xs, x_masks, True)
 
 

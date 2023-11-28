@@ -81,7 +81,6 @@ class PromptTTS(nn.Module):
     def forward(self, inputs_ling, input_lengths, inputs_speaker, inputs_style_embedding , inputs_content_embedding, mel_targets=None, output_lengths=None, pitch_targets=None, energy_targets=None, alpha=1.0):
         B = inputs_ling.size(0)
         T = inputs_ling.size(1)
-
         inputs_ling_pad = torch.cat((inputs_ling, torch.zeros((1, 512-inputs_ling.shape[1]), dtype=torch.int64)), 1)
         token_embed_pad = self.src_word_emb(inputs_ling_pad)
         src_mask = self._get_mask_from_lengths(input_lengths)
@@ -103,10 +102,15 @@ class PromptTTS(nn.Module):
         x = torch.concat([x, speaker_embedding.unsqueeze(1).expand(B, T, -1), inputs_style_embedding.unsqueeze(1).expand(B, T, -1), inputs_content_embedding.unsqueeze(1).expand(B, T, -1)], dim=-1)
         x = self.embed_projection1(x)
 
+
+        import pdb; pdb.set_trace()
         src_mask = src_mask[:,:input_lengths[0]]
-        p_outs = self.pitch_predictor(x, src_mask.unsqueeze(-1))
-        e_outs = self.energy_predictor(x, src_mask.unsqueeze(-1))
-        d_outs = self.duration_predictor.inference(x, src_mask.unsqueeze(-1))
+
+        # p_outs = self.pitch_predictor(x, src_mask.unsqueeze(-1))
+        # e_outs = self.energy_predictor(x, src_mask.unsqueeze(-1))
+        # d_outs = self.duration_predictor.inference(x, src_mask.unsqueeze(-1))
+        d_outs = self.duration_predictor(x, src_mask.unsqueeze(-1))
+        
         p_embs = self.pitch_embed(p_outs.unsqueeze(1)).transpose(1, 2)
         e_embs = self.energy_embed(e_outs.unsqueeze(1)).transpose(1, 2)
         x = x + p_embs + e_embs # torch.Size([1, 58, 384])

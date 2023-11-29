@@ -22,7 +22,7 @@ the synthesized speech is under `outputs/prompt_tts_open_source_joint/test_audio
 ```sh
 pip3 install yacs streamlit jieba pypinyin g2p_en numba scipy transformers==4.26.1
 streamlit run demo_page.py
-```sh
+```
 
 ![image](https://github.com/ZillaRU/EmotiVoice-TPU/assets/25343084/88b04f80-2af9-46fc-8fd8-a3e62bf653a0)
 

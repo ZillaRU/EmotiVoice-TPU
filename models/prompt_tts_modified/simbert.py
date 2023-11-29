@@ -15,7 +15,6 @@
 import torch
 import torch.nn as nn
 from .. import EngineOV
-from transformers import AutoModel
 import numpy as np
 
 class ClassificationHead(nn.Module):

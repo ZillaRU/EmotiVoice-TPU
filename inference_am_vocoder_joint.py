@@ -13,7 +13,7 @@
 # limitations under the License.
 from models.prompt_tts_modified.jets import JETSGenerator
 from models.prompt_tts_modified.simbert import StyleEncoder
-from transformers import AutoTokenizer
+from tokenizers import AutoTokenizer
 import os, sys, warnings, torch, glob, argparse
 import numpy as np
 from models.hifigan.get_vocoder import MAX_WAV_VALUE
@@ -27,21 +27,13 @@ def get_style_embedding(prompt_text, tokenizer, style_encoder):
     token_type_ids = prompt["token_type_ids"]
     attention_mask = prompt["attention_mask"]
 
-    # _prompt = tokenizer([prompt_text], return_tensors="pt")
-    # _input_ids = _prompt["input_ids"]
-    # _token_type_ids = _prompt["token_type_ids"]
-    # _attention_mask = _prompt["attention_mask"]
-
     with torch.no_grad():
         # import pdb; pdb.set_trace()
         import time; st_time = time.time()
         output = style_encoder(
         input_ids=input_ids,
         token_type_ids=token_type_ids,
-        attention_mask=attention_mask,
-        # _input_ids=_input_ids,
-        # _token_type_ids=_token_type_ids,
-        # _attention_mask=_attention_mask,
+        attention_mask=attention_mask
         )
         print('====================== BERT time cost:', time.time()-st_time)
         style_embedding = output["pooled_output"].cpu().squeeze().numpy()

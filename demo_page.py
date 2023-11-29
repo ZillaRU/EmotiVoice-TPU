@@ -28,7 +28,7 @@ from transformers import AutoTokenizer
 import base64
 from pathlib import Path
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+DEVICE = "cpu"
 MAX_WAV_VALUE = 32768.0
 
 config = Config()
@@ -40,11 +40,29 @@ def create_download_link():
 
 html=create_download_link()
 
+def get_style_embedding(prompt_text, tokenizer, style_encoder):
+    prompt = tokenizer([prompt_text], padding='max_length', truncation=True, max_length=512, return_tensors="pt")
+    input_ids = prompt["input_ids"]
+    token_type_ids = prompt["token_type_ids"]
+    attention_mask = prompt["attention_mask"]
+
+    with torch.no_grad():
+        import time; st_time = time.time()
+        output = style_encoder(
+        input_ids=input_ids,
+        token_type_ids=token_type_ids,
+        attention_mask=attention_mask
+        )
+        print('====================== BERT time cost:', time.time()-st_time)
+        style_embedding = output["pooled_output"].cpu().squeeze().numpy()
+    return style_embedding
+
+
 st.set_page_config(
     page_title="demo page",
     page_icon="📕",
 )
-st.write("# Text-To-Speech")
+st.write("# Text-To-Speech on Airbox")
 st.markdown(f"""
 ### How to use:
          
@@ -67,11 +85,6 @@ def scan_checkpoint(cp_dir, prefix, c=8):
 
 @st.cache_resource
 def get_models():
-    
-    am_checkpoint_path = scan_checkpoint(f'{config.output_directory}/prompt_tts_open_source_joint/ckpt', 'g_')
-
-    style_encoder_checkpoint_path = scan_checkpoint(f'{config.output_directory}/style_encoder/ckpt', 'checkpoint_', 6)#f'{config.output_directory}/style_encoder/ckpt/checkpoint_163431' 
-
     with open(config.model_config_path, 'r') as fin:
         conf = CONFIG.load_cfg(fin)
     
@@ -79,18 +92,7 @@ def get_models():
     conf.n_speaker = config.speaker_n_labels
 
     style_encoder = StyleEncoder(config)
-    model_CKPT = torch.load(style_encoder_checkpoint_path, map_location="cpu")
-    model_ckpt = {}
-    for key, value in model_CKPT['model'].items():
-        new_key = key[7:]
-        model_ckpt[new_key] = value
-    style_encoder.load_state_dict(model_ckpt)
-    generator = JETSGenerator(conf).to(DEVICE)
-
-    model_CKPT = torch.load(am_checkpoint_path, map_location=DEVICE)
-    generator.load_state_dict(model_CKPT['generator'])
-    generator.eval()
-
+    generator = JETSGenerator(conf)
     tokenizer = AutoTokenizer.from_pretrained(config.bert_path)
 
     with open(config.token_list_path, 'r') as f:
@@ -99,26 +101,11 @@ def get_models():
     with open(config.speaker2id_path, encoding='utf-8') as f:
         speaker2id = {t.strip():idx for idx, t in enumerate(f.readlines())}
 
-
     return (style_encoder, generator, tokenizer, token2id, speaker2id)
 
-def get_style_embedding(prompt, tokenizer, style_encoder):
-    prompt = tokenizer([prompt], return_tensors="pt")
-    input_ids = prompt["input_ids"]
-    token_type_ids = prompt["token_type_ids"]
-    attention_mask = prompt["attention_mask"]
-    with torch.no_grad():
-        output = style_encoder(
-        input_ids=input_ids,
-        token_type_ids=token_type_ids,
-        attention_mask=attention_mask,
-    )
-    style_embedding = output["pooled_output"].cpu().squeeze().numpy()
-    return style_embedding
 
 def tts(name, text, prompt, content, speaker, models):
     (style_encoder, generator, tokenizer, token2id, speaker2id)=models
-    
 
     style_embedding = get_style_embedding(prompt, tokenizer, style_encoder)
     content_embedding = get_style_embedding(content, tokenizer, style_encoder)
@@ -153,6 +140,7 @@ speakers = config.speakers
 models = get_models()
 
 re_english_word = re.compile('([a-z\d\-\.\']+)', re.I)
+
 def new_line(i):
     col1, col2, col3, col4 = st.columns([1.5, 1.5, 3.5, 1.3])
     with col1:

@@ -17,6 +17,7 @@ from frontend_cn import g2p_cn, re_digits
 from frontend_en import preprocess_english
 
 re_english_word = re.compile('([a-z\-\.\']+|\d+[\d\.]*)', re.I)
+
 def g2p_cn_en(text):
     parts = re_english_word.split(text)
     tts_text = ["<sos/eos>"]

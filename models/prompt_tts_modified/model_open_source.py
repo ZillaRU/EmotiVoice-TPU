@@ -74,10 +74,7 @@ class PromptTTS(nn.Module):
             (~src_mask.unsqueeze(-2)).numpy().astype(np.float32)]
         )[0] ############
         x = torch.from_numpy(x[~src_mask]).unsqueeze(0)
-<<<<<<< Updated upstream
         
-=======
->>>>>>> Stashed changes
         speaker_embedding = self.spk_tokenizer(inputs_speaker)
         x = torch.concat([x, speaker_embedding.unsqueeze(1).expand(B, T, -1), inputs_style_embedding.unsqueeze(1).expand(B, T, -1), inputs_content_embedding.unsqueeze(1).expand(B, T, -1)], dim=-1)
         x = self.embed_projection1(x)

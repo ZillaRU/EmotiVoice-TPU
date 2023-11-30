@@ -41,7 +41,7 @@ class Config:
     pitch2id_path       = DATA_DIR + "text/pitch"
     energy2id_path      = DATA_DIR + "text/energy"
     speed2id_path       = DATA_DIR + "text/speed"
-    bert_path           = 'WangZeJun/simbert-base-chinese'
+    bert_path           = './model_file/simbert-base-chinese'
     token_list_path     = DATA_DIR + "text/tokenlist"
     style_encoder_ckpt  = ROOT_DIR + "/outputs/style_encoder/ckpt/checkpoint_163431"
     tmp_dir             = ROOT_DIR + "/tmp"

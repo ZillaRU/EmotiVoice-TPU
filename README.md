@@ -18,6 +18,14 @@ python3 inference_am_vocoder_joint.py \
 ```
 the synthesized speech is under `outputs/prompt_tts_open_source_joint/test_audio/audio`.
 
+## 3. Or run web demo:
+```sh
+pip3 install yacs streamlit jieba pypinyin g2p_en numba scipy transformers==4.26.1
+streamlit run demo_page.py
+```
+
+![image](https://github.com/ZillaRU/EmotiVoice-TPU/assets/25343084/88b04f80-2af9-46fc-8fd8-a3e62bf653a0)
+
 ## For more detailed usage, please refer to the following description from the original repo of EmotiVoice.
 
 ***

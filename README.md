@@ -6,7 +6,7 @@ This repo is a BM1684X-adapted demo of NetEase YouDao EmotiVoice.
 python3 -m pip install dfn
 python3 -m dfn --url https://disk.sophgo.vip/sharing/KymDuWLGw
 ```
-Put the three model files in `./model_file`.
+Put the model files in `./model_file`.
 
 ## 2. Then run:
 ```sh

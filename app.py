@@ -92,6 +92,14 @@ def load_model():
 
 @app.route('/tts', methods=['POST'])
 def process_data():
+    '''
+    请求示例：
+    {
+        "text_content": "测试一下吧！地球爆炸啦！",
+        "speaker": "3370",
+        "emotion":"极其愤怒"
+    }
+    '''
     data = request.get_json()
     transcript = data.get('text_content')
     speaker = data.get('speaker')

@@ -20,7 +20,7 @@ import torch
 import re
 
 from frontend import g2p_cn_en
-from config.joint.config import Config
+from config.config import Config
 from models.prompt_tts_modified.jets import JETSGenerator
 from models.prompt_tts_modified.simbert import StyleEncoder
 from transformers import AutoTokenizer

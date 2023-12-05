@@ -45,7 +45,7 @@ class Config:
     token_list_path     = DATA_DIR + "text/tokenlist"
     style_encoder_ckpt  = ROOT_DIR + "/outputs/style_encoder/ckpt/checkpoint_163431"
     tmp_dir             = ROOT_DIR + "/tmp"
-    model_config_path   = ROOT_DIR + "/config/joint/config.yaml"
+    model_config_path   = ROOT_DIR + "/config/config.yaml"
 
     #### Model ####
     bert_hidden_size = 768

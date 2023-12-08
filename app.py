@@ -95,9 +95,9 @@ def process_data():
     '''
     请求示例：
     {
-        "text_content": "测试一下吧！地球爆炸啦！",
-        "speaker": "3370",
-        "emotion":"极其愤怒"
+        "text_content": "测试一下吧！地球爆炸啦！", # 建议限制下字数，当前一次推理最多输出16秒音频
+        "speaker": "3370", # 可支持的speaker列表见./data/youdao/text/speaker2，建议做成下拉选项
+        "emotion":"惊讶"  # 可支持的任意文字，参考的emotion列表见./data/youdao/text/emotion，建议做成下拉选项
     }
     '''
     data = request.get_json()

@@ -1,3 +1,4 @@
 jieba
 pypinyin
 g2p_en
+soundfile

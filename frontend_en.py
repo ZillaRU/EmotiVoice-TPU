@@ -17,28 +17,9 @@ import argparse
 from string import punctuation
 import numpy as np
 
-from g2p_en import G2p
-
-import os
 
 
-ROOT_DIR = os.path.dirname(os.path.abspath("__file__"))
-
-def read_lexicon(lex_path):
-    lexicon = {}
-    with open(lex_path) as f:
-        for line in f:
-            temp = re.split(r"\s+", line.strip("\n"))
-            word = temp[0]
-            phones = temp[1:]
-            if word.lower() not in lexicon:
-                lexicon[word.lower()] = phones
-    return lexicon
-
-def preprocess_english(text):
-    lexicon = read_lexicon(f"{ROOT_DIR}/lexicon/librispeech-lexicon.txt")
-
-    g2p = G2p()
+def preload_preprocess_english(g2p, lexicon, text):
     phones = []
     words = list(filter(lambda x: x not in {"", " "}, re.split(r"([,;.\-\?\!\s+])", text)))
 
@@ -49,6 +30,7 @@ def preprocess_english(text):
                 for ph in lexicon[w.lower()]
             ]+["engsp1"]
         else:
+            import pdb; pdb.set_trace()
             phone=g2p(w)
             if not phone:
                 continue
@@ -67,18 +49,3 @@ def preprocess_english(text):
     phones = ["<sos/eos>"] + phones + [mark, "<sos/eos>"]
     return " ".join(phones)
     
-
-if __name__ == "__main__":
-    phonemes= preprocess_english("Happy New Year")
-    import sys
-    from os.path import isfile
-    if len(sys.argv) < 2:
-        print("Usage: python %s <text>" % sys.argv[0])
-        exit()
-    text_file = sys.argv[1]
-    if isfile(text_file):
-        fp = open(text_file, 'r')
-        for line in fp:
-            phoneme=preprocess_english(line.rstrip())
-            print(phoneme)
-        fp.close()

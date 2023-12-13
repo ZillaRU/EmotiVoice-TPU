@@ -14,7 +14,6 @@
 
 import re
 from pypinyin import pinyin, lazy_pinyin, Style
-import jieba
 import string
 from cn2an.an2cn import An2Cn
 
@@ -99,6 +98,7 @@ def tn_chinese(text):
     return ''.join(words)
 
 def g2p_cn(text):
+    import jieba
     res_text=["<sos/eos>"]
     seg_list = jieba.cut(text)
     for seg in seg_list:
@@ -119,16 +119,23 @@ def g2p_cn(text):
     res_text.append("<sos/eos>")
     return " ".join(res_text)
 
-if __name__ == "__main__":
-    import sys
-    from os.path import isfile
-    if len(sys.argv) < 2:
-        print("Usage: python %s <text>" % sys.argv[0])
-        exit()
-    text_file = sys.argv[1]
-    if isfile(text_file):
-        fp = open(text_file, 'r')
-        for line in fp:
-            phoneme=g2p_cn(line.rstrip())
-            print(phoneme)
-        fp.close()
+
+def preload_g2p_cn(seg_list):
+    res_text=["<sos/eos>"]
+    for seg in seg_list:
+        if seg == " ": continue
+        seg_tn = tn_chinese(seg)
+        py =[_py[0] for _py in pinyin(seg_tn, style=Style.TONE3,neutral_tone_with_five=True)]
+
+        if any([has_chinese_punctuation(_py) for _py in py])  or any([has_english_punctuation(_py) for _py in py]):
+            res_text.pop()
+            res_text.append("sp3")
+        else:
+            
+            py = [" ".join(split_py(_py)) for _py in py]
+            
+            res_text.append(" sp0 ".join(py))
+            res_text.append("sp1")
+    res_text.pop()
+    res_text.append("<sos/eos>")
+    return " ".join(res_text)

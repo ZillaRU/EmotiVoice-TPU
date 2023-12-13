@@ -69,10 +69,12 @@ class PromptTTS(nn.Module):
         inputs_ling_pad = torch.cat((inputs_ling, torch.zeros((1, 512-inputs_ling.shape[1]), dtype=torch.int64)), 1)
         token_embed_pad = self.src_word_emb(inputs_ling_pad)
         src_mask = self._get_mask_from_lengths(input_lengths)
+        import time; st_time = time.time()
         x = self.encoder(
             [token_embed_pad.numpy().astype(np.float32),
             (~src_mask.unsqueeze(-2)).numpy().astype(np.float32)]
         )[0] ############
+        print('====================== encoder time cost:', time.time()-st_time)
         x = torch.from_numpy(x[~src_mask]).unsqueeze(0)
         
         speaker_embedding = self.spk_tokenizer(inputs_speaker)
@@ -93,13 +95,19 @@ class PromptTTS(nn.Module):
         e_outs = e_outs[:,:input_lengths[0]]
         d_outs = d_outs[:,:input_lengths[0]]
 
+        import time; st_time = time.time()
         p_embs = self.pitch_embed(p_outs.unsqueeze(1)).transpose(1, 2)
+        print('====================== pitch_embed time cost:', time.time()-st_time)
+        st_time = time.time()
         e_embs = self.energy_embed(e_outs.unsqueeze(1)).transpose(1, 2)
+        print('====================== energy_embed time cost:', time.time()-st_time)
         x = torch.from_numpy(x) + p_embs + e_embs
         x = self.length_regulator(x, d_outs, None, ~src_mask)
         
         x_pad = torch.cat((x, torch.zeros((x.shape[0], 2048-x.shape[1], x.shape[2]))), axis=1)
+        st_time = time.time()
         x_pad = torch.from_numpy(self.decoder([x_pad.numpy().astype(np.float32)])[0])
+        print('====================== decoder time cost:', time.time()-st_time)
         x = x_pad[:, :x.shape[1], :]
         x = self.to_mel(x)
         return x

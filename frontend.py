@@ -12,13 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import re
-from frontend_cn import g2p_cn, re_digits
-from frontend_en import preprocess_english
+import re, jieba
+from frontend_cn import preload_g2p_cn, re_digits
+from frontend_en import preload_preprocess_english
+from g2p_en import G2p
+import os
 
-re_english_word = re.compile('([a-z\-\.\']+|\d+[\d\.]*)', re.I)
 
-def g2p_cn_en(text):
+def read_lexicon(lex_path):
+    lexicon = {}
+    with open(lex_path) as f:
+        for line in f:
+            temp = re.split(r"\s+", line.strip("\n"))
+            word = temp[0]
+            phones = temp[1:]
+            if word.lower() not in lexicon:
+                lexicon[word.lower()] = phones
+    return lexicon
+
+def preload_g2p_cn_en(text):
     parts = re_english_word.split(text)
     tts_text = ["<sos/eos>"]
     chartype = ''
@@ -27,12 +39,12 @@ def g2p_cn_en(text):
         if re_digits.match(part) and (chartype == 'cn' or chartype == '') or contains_chinese(part):
             if chartype == 'en':
                 tts_text.append('eng_cn_sp')
-            phoneme = g2p_cn(part)
+            phoneme = preload_g2p_cn(jieba.cut(part))
             chartype = 'cn'
         elif re_english_word.match(part):
             if chartype == 'cn':
                 tts_text.append('cn_eng_sp')
-            phoneme = preprocess_english(part).replace(".", "")
+            phoneme = preload_preprocess_english(g2p, lexicon, part).replace(".", "")
             chartype = 'en'
         else:
             continue
@@ -46,16 +58,8 @@ def contains_chinese(text):
     return match is not None
 
 
-if __name__ == "__main__":
-    import sys
-    from os.path import isfile
-    if len(sys.argv) < 2:
-        print("Usage: python %s <text>" % sys.argv[0])
-        exit()
-    text_file = sys.argv[1]
-    if isfile(text_file):
-        fp = open(text_file, 'r')
-        for line in fp:
-            phoneme = g2p_cn_en(line.rstrip())
-            print(phoneme)
-        fp.close()
+re_english_word = re.compile('([a-z\-\.\']+|\d+[\d\.]*)', re.I)
+jieba.initialize()
+ROOT_DIR = os.path.dirname(os.path.abspath("__file__"))
+lexicon = read_lexicon(f"{ROOT_DIR}/lexicon/librispeech-lexicon.txt")
+g2p = G2p()

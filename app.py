@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, send_file, g, jsonify, send_from_directory
-from frontend import g2p_cn_en
+from frontend import preload_g2p_cn_en as g2p_cn_en
 import scipy.io.wavfile as wavf
 import torch
 from transformers import AutoTokenizer
@@ -42,13 +42,11 @@ class EmotiVoicePipeline:
             attention_mask = prompt["attention_mask"]
 
             with torch.no_grad():
-                import time; st_time = time.time()
                 output = style_encoder(
                 input_ids=input_ids,
                 token_type_ids=token_type_ids,
                 attention_mask=attention_mask
                 )
-                print('====================== BERT time cost:', time.time()-st_time)
                 style_embedding = output["pooled_output"].cpu().squeeze().numpy()
             return style_embedding
         
@@ -104,14 +102,12 @@ def process_data():
     transcript = data.get('text_content')
     speaker = data.get('speaker')
     emotion = data.get('emotion')
-    lang = data.get('lang','zh_us')
     res_audio = app.config['pipeline'](transcript, emotion, speaker)
    
     buffer = io.BytesIO()
     wavf.write(buffer, app.config['pipeline'].sampling_rate, res_audio)
 
     res_audio_b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
-    # open('test.wav','wb').write(base64.b64decode(res_audio_b64))
     response = jsonify({'code':0,'audio_content': res_audio_b64})
     return response
 

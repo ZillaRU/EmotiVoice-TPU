@@ -30,7 +30,6 @@ def preload_preprocess_english(g2p, lexicon, text):
                 for ph in lexicon[w.lower()]
             ]+["engsp1"]
         else:
-            import pdb; pdb.set_trace()
             phone=g2p(w)
             if not phone:
                 continue

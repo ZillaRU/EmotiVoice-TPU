@@ -19,7 +19,7 @@ from yacs import config as CONFIG
 import torch
 import re
 
-from frontend import g2p_cn_en
+from frontend import preload_g2p_cn_en
 from config.config import Config
 from models.prompt_tts_modified.jets import JETSGenerator
 from models.prompt_tts_modified.simbert import StyleEncoder
@@ -150,11 +150,11 @@ def new_line(i):
     with col3:
         content=st.text_input("Text to be synthesized into speech (合成文本)", "合成文本", key=f"{i}_text")
     with col4:
-        lang=st.selectbox("Language (语言)", ["zh_us"], key=f"{i}_lang")
+        lang=st.selectbox("Language (语言)", ["中/英文"], key=f"{i}_lang")
 
     flag = st.button(f"Synthesize (合成)", key=f"{i}_button1")
     if flag:
-        text =  g2p_cn_en(content)
+        text =  preload_g2p_cn_en(content)
         path = tts(i, text, prompt, content, speaker, models)
         st.audio(path, sample_rate=config.sampling_rate)
 

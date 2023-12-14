@@ -39,9 +39,10 @@ def preload_preprocess_english(g2p, lexicon, text):
             elif phone == " ":
                 continue
             else:
-                phones.pop() # pop engsp1
-                phones.append("engsp4")
-    if "engsp" in phones[-1]:
+                if len(phones) > 0:
+                    phones.pop() # pop engsp1
+                    phones.append("engsp4")
+    if len(phones) > 0 and "engsp" in phones[-1]:
         phones.pop()
 
     mark = "." if text[-1] != "?" else "?"

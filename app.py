@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, send_file, g, jsonify, send_from_directory
-from frontend import preload_g2p_cn_en as g2p_cn_en
+from frontend import g2p_cn_en, G2p, read_lexicon
 import scipy.io.wavfile as wavf
 import torch
 from transformers import AutoTokenizer
@@ -14,6 +14,9 @@ import soundfile as sf
 
 
 app = Flask(__name__)
+lexicon = read_lexicon(f"./lexicon/librispeech-lexicon.txt")
+g2p = G2p()
+
 MAX_WAV_VALUE = 32768.0
 
 class EmotiVoicePipeline:
@@ -57,7 +60,7 @@ class EmotiVoicePipeline:
             return None
         speaker = self.speaker2id[speaker]
 
-        phonemes = g2p_cn_en(content).split()
+        phonemes = g2p_cn_en(content, g2p, lexicon).split()
         text_int = [self.token2id[ph] for ph in phonemes]
         
         sequence = torch.from_numpy(np.array(text_int)).long().unsqueeze(0)

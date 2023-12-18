@@ -12,40 +12,69 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import re
 import argparse
 from string import punctuation
 import numpy as np
 
+from g2p_en import G2p
+
+import os
 
 
-def preload_preprocess_english(g2p, lexicon, text):
+ROOT_DIR = os.path.dirname(os.path.abspath("__file__"))
+
+def read_lexicon(lex_path):
+    lexicon = {}
+    with open(lex_path) as f:
+        for line in f:
+            temp = re.split(r"\s+", line.strip("\n"))
+            word = temp[0]
+            phones = temp[1:]
+            if word.lower() not in lexicon:
+                lexicon[word.lower()] = phones
+    return lexicon
+
+def get_eng_phoneme(text, g2p, lexicon, pad_sos_eos=True):
+    """
+    english g2p
+    """
+    filters = {",", " ", "'"}
     phones = []
     words = list(filter(lambda x: x not in {"", " "}, re.split(r"([,;.\-\?\!\s+])", text)))
 
     for w in words:
         if w.lower() in lexicon:
-            phones += [
-                "[" + ph + "]" 
-                for ph in lexicon[w.lower()]
-            ]+["engsp1"]
+            
+            for ph in lexicon[w.lower()]:
+                if ph not in filters:
+                    phones += ["[" + ph + "]"]
+
+            if "sp" not in phones[-1]:
+                phones += ["engsp1"]
         else:
             phone=g2p(w)
             if not phone:
                 continue
 
             if phone[0].isalnum():
-                phones += ["[" + ph + "]" if ph != ' ' else 'engsp1' for ph in phone]
+                
+                for ph in phone:
+                    if ph not in filters:
+                        phones += ["[" + ph + "]"]
+                    if ph == " " and "sp" not in phones[-1]:
+                        phones += ["engsp1"]
             elif phone == " ":
                 continue
-            else:
-                if len(phones) > 0:
-                    phones.pop() # pop engsp1
-                    phones.append("engsp4")
-    if len(phones) > 0 and "engsp" in phones[-1]:
+            elif phones:
+                phones.pop() # pop engsp1
+                phones.append("engsp4")
+    if phones and "engsp" in phones[-1]:
         phones.pop()
 
-    mark = "." if text[-1] != "?" else "?"
-    phones = ["<sos/eos>"] + phones + [mark, "<sos/eos>"]
+    # mark = "." if text[-1] != "?" else "?"
+    if pad_sos_eos:
+        phones = ["<sos/eos>"] + phones + ["<sos/eos>"]
     return " ".join(phones)
     

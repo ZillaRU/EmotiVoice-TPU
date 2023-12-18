@@ -13,7 +13,7 @@
 # limitations under the License.
 from models.prompt_tts_modified.jets import JETSGenerator
 from models.prompt_tts_modified.simbert import StyleEncoder
-from tokenizers import AutoTokenizer
+from transformers import AutoTokenizer
 import os, sys, warnings, torch, glob, argparse
 import numpy as np
 from models.hifigan.get_vocoder import MAX_WAV_VALUE
@@ -108,7 +108,7 @@ def main(args, config):
             print('====================== Generator time cost:', time.time()-st_time)
             audio = infer_output["wav_predictions"].squeeze()* MAX_WAV_VALUE
             audio = audio.cpu().numpy().astype('int16')
-            sf.write(file=root_path + "/test_audio/audio/" +f"{i+1}.wav", data=audio, samplerate=config.sampling_rate) #h.sampling_rate
+            sf.write(f"{i+1}.wav", data=audio, samplerate=config.sampling_rate) #h.sampling_rate
 
 
 if __name__ == '__main__':

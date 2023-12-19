@@ -12,13 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import streamlit as st
+# import streamlit as st
+import gradio as gr
 import os, glob
 import numpy as np
 from yacs import config as CONFIG
 import torch
 import re
-
+import soundfile as sf
 from frontend import g2p_cn_en, G2p, read_lexicon
 from config.config import Config
 from models.prompt_tts_modified.jets import JETSGenerator
@@ -58,23 +59,23 @@ def get_style_embedding(prompt_text, tokenizer, style_encoder):
     return style_embedding
 
 
-st.set_page_config(
-    page_title="demo page",
-    page_icon="📕",
-)
-st.write("# Text-To-Speech on Airbox")
-st.markdown(f"""
-### How to use:
+# st.set_page_config(
+#     page_title="demo page",
+#     page_icon="📕",
+# )
+# st.write("# Text-To-Speech on Airbox")
+# st.markdown(f"""
+# ### How to use:
          
-- Simply select a **Speaker ID**, type in the **text** you want to convert and the emotion **Prompt**, like a single word or even a sentence. Then click on the **Synthesize** button below to start voice synthesis.
+# - Simply select a **Speaker ID**, type in the **text** you want to convert and the emotion **Prompt**, like a single word or even a sentence. Then click on the **Synthesize** button below to start voice synthesis.
 
-- You can download the audio by clicking on the vertical three points next to the displayed audio widget.
+# - You can download the audio by clicking on the vertical three points next to the displayed audio widget.
 
-- For more information on **'Speaker ID'**, please consult the [EmotiVoice voice wiki page](https://github.com/netease-youdao/EmotiVoice/tree/main/data/youdao/text)
+# - For more information on **'Speaker ID'**, please consult the [EmotiVoice voice wiki page](https://github.com/netease-youdao/EmotiVoice/tree/main/data/youdao/text)
 
-- This interactive demo page is provided under the {html} file. The audio is synthesized by AI. 音频由AI合成，仅供参考。
+# - This interactive demo page is provided under the {html} file. The audio is synthesized by AI. 音频由AI合成，仅供参考。
 
-""", unsafe_allow_html=True)
+# """, unsafe_allow_html=True)
 
 def scan_checkpoint(cp_dir, prefix, c=8):
     pattern = os.path.join(cp_dir, prefix + '?'*c)
@@ -83,7 +84,6 @@ def scan_checkpoint(cp_dir, prefix, c=8):
         return None
     return sorted(cp_list)[-1]
 
-@st.cache_resource
 def get_models():
     with open(config.model_config_path, 'r') as fin:
         conf = CONFIG.load_cfg(fin)
@@ -104,7 +104,7 @@ def get_models():
     return (style_encoder, generator, tokenizer, token2id, speaker2id)
 
 
-def tts(name, text, prompt, content, speaker, models):
+def tts(text, prompt, content, speaker, models):
     (style_encoder, generator, tokenizer, token2id, speaker2id)=models
 
     style_embedding = get_style_embedding(prompt, tokenizer, style_encoder)
@@ -133,8 +133,9 @@ def tts(name, text, prompt, content, speaker, models):
 
     audio = infer_output["wav_predictions"].squeeze()* MAX_WAV_VALUE
     audio = audio.cpu().numpy().astype('int16')
+    sf.write(file="tmp.wav", data=audio, samplerate=config.sampling_rate)
+    return "tmp.wav"
 
-    return audio
 
 speakers = config.speakers
 models = get_models()
@@ -143,23 +144,33 @@ lexicon = read_lexicon(f"./lexicon/librispeech-lexicon.txt")
 
 re_english_word = re.compile('([a-z\d\-\.\']+)', re.I)
 
-def new_line(i):
-    col1, col2, col3, col4 = st.columns([1.5, 1.5, 3.5, 1.3])
-    with col1:
-        speaker=st.selectbox("Speaker ID (说话人)", speakers, key=f"{i}_speaker")
-    with col2:
-        prompt=st.text_input("Prompt (开心/悲伤)", "", key=f"{i}_prompt")
-    with col3:
-        content=st.text_input("Text to be synthesized into speech (合成文本)", "合成文本", key=f"{i}_text")
-    with col4:
-        lang=st.selectbox("Language (语言)", ["中/英文"], key=f"{i}_lang")
 
-    flag = st.button(f"Synthesize (合成)", key=f"{i}_button1")
-    if flag:
-        text =  g2p_cn_en(content, g2p, lexicon)
-        path = tts(i, text, prompt, content, speaker, models)
-        st.audio(path, sample_rate=config.sampling_rate)
+def synthesize_text(speaker, prompt, content):
+    text = g2p_cn_en(content, g2p, lexicon)
+    path = tts(text, prompt, content, speaker, models)
+    return path
 
+speaker = gr.inputs.Dropdown(choices=speakers, label="Speaker ID (说话人)")
+prompt = gr.inputs.Textbox(label="Prompt (开心/悲伤)")
+content = gr.inputs.Textbox(default="合成文本", label="Text to be synthesized into speech (合成文本)")
+synthesize = gr.outputs.Audio(type="filepath")
 
+gr.Interface(title="TTS with AirBox（支持中英文混合输入）", fn=synthesize_text, inputs=[speaker, prompt, content], outputs=synthesize).launch(ssl_verify=False, server_name="0.0.0.0")
 
-new_line(0)
+# def new_line(i):
+#     col1, col2, col3, col4 = st.columns([1.5, 1.5, 3.5, 1.3])
+#     with col1:
+#         speaker=st.selectbox("Speaker ID (说话人)", speakers, key=f"{i}_speaker")
+#     with col2:
+#         prompt=st.text_input("Prompt (开心/悲伤)", "", key=f"{i}_prompt")
+#     with col3:
+#         content=st.text_input("Text to be synthesized into speech (合成文本)", "合成文本", key=f"{i}_text")
+#     with col4:
+#         lang=st.selectbox("Language (语言)", ["中/英文"], key=f"{i}_lang")
+
+#     flag = st.button(f"Synthesize (合成)", key=f"{i}_button1")
+#     if flag:
+#         text =  g2p_cn_en(content, g2p, lexicon)
+#         path = tts(i, text, prompt, content, speaker, models)
+#         st.audio(path, sample_rate=config.sampling_rate)
+

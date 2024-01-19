@@ -3,6 +3,7 @@ model_file/*.bmodel
 model_file/*.npy
 model_file/*.pth
 model_file/*.pt
+model_file/*
 debug
 *.pyc
 */__pycache__
@@ -10,3 +11,6 @@ tmp
 WangZeJun
 test*
 outputs
+*.wav
+processed/*
+resources/*

@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# import streamlit as st
 import gradio as gr
 import os, glob
 import numpy as np
@@ -25,7 +24,8 @@ from config.config import Config
 from models.prompt_tts_modified.jets import JETSGenerator
 from models.prompt_tts_modified.simbert import StyleEncoder
 from transformers import AutoTokenizer
-
+import se_extractor
+from api import ToneColorConverter
 import base64
 from pathlib import Path
 
@@ -33,56 +33,6 @@ DEVICE = "cpu"
 MAX_WAV_VALUE = 32768.0
 
 config = Config()
-
-def create_download_link():
-    pdf_path = Path("EmotiVoice_UserAgreement_易魔声用户协议.pdf")
-    base64_pdf = base64.b64encode(pdf_path.read_bytes()).decode("utf-8")  # val looks like b'...'
-    return f'<a href="data:application/octet-stream;base64,{base64_pdf}" download="EmotiVoice_UserAgreement_易魔声用户协议.pdf.pdf">EmotiVoice_UserAgreement_易魔声用户协议.pdf</a>'
-
-html=create_download_link()
-
-def get_style_embedding(prompt_text, tokenizer, style_encoder):
-    prompt = tokenizer([prompt_text], padding='max_length', truncation=True, max_length=512, return_tensors="pt")
-    input_ids = prompt["input_ids"]
-    token_type_ids = prompt["token_type_ids"]
-    attention_mask = prompt["attention_mask"]
-
-    with torch.no_grad():
-        import time; st_time = time.time()
-        output = style_encoder(
-        input_ids=input_ids,
-        token_type_ids=token_type_ids,
-        attention_mask=attention_mask
-        )
-        print('====================== BERT time cost:', time.time()-st_time)
-        style_embedding = output["pooled_output"].cpu().squeeze().numpy()
-    return style_embedding
-
-
-# st.set_page_config(
-#     page_title="demo page",
-#     page_icon="📕",
-# )
-# st.write("# Text-To-Speech on Airbox")
-# st.markdown(f"""
-# ### How to use:
-         
-# - Simply select a **Speaker ID**, type in the **text** you want to convert and the emotion **Prompt**, like a single word or even a sentence. Then click on the **Synthesize** button below to start voice synthesis.
-
-# - You can download the audio by clicking on the vertical three points next to the displayed audio widget.
-
-# - For more information on **'Speaker ID'**, please consult the [EmotiVoice voice wiki page](https://github.com/netease-youdao/EmotiVoice/tree/main/data/youdao/text)
-
-# - This interactive demo page is provided under the {html} file. The audio is synthesized by AI. 音频由AI合成，仅供参考。
-
-# """, unsafe_allow_html=True)
-
-def scan_checkpoint(cp_dir, prefix, c=8):
-    pattern = os.path.join(cp_dir, prefix + '?'*c)
-    cp_list = glob.glob(pattern)
-    if len(cp_list) == 0:
-        return None
-    return sorted(cp_list)[-1]
 
 def get_models():
     with open(config.model_config_path, 'r') as fin:
@@ -103,12 +53,37 @@ def get_models():
 
     return (style_encoder, generator, tokenizer, token2id, speaker2id)
 
+speakers = config.speakers
+models = get_models()
+g2p = G2p()
+lexicon = read_lexicon(f"./lexicon/librispeech-lexicon.txt")
+tone_color_converter = ToneColorConverter(f'./model_file/converter/config.json', device=DEVICE)
 
-def tts(text, prompt, content, speaker, models):
+
+def get_style_embedding(prompt_text, tokenizer, style_encoder):
+    prompt = tokenizer([prompt_text], padding='max_length', truncation=True, max_length=512, return_tensors="pt")
+    input_ids = prompt["input_ids"]
+    token_type_ids = prompt["token_type_ids"]
+    attention_mask = prompt["attention_mask"]
+
+    with torch.no_grad():
+        import time; st_time = time.time()
+        output = style_encoder(
+        input_ids=input_ids,
+        token_type_ids=token_type_ids,
+        attention_mask=attention_mask
+        )
+        print('====================== BERT time cost:', time.time()-st_time)
+        style_embedding = output["pooled_output"].cpu().squeeze().numpy()
+    return style_embedding
+
+
+def tts(text_content, emotion, speaker, models, output_path):
+    text = g2p_cn_en(text_content, g2p, lexicon)
     (style_encoder, generator, tokenizer, token2id, speaker2id)=models
 
-    style_embedding = get_style_embedding(prompt, tokenizer, style_encoder)
-    content_embedding = get_style_embedding(content, tokenizer, style_encoder)
+    style_embedding = get_style_embedding(emotion, tokenizer, style_encoder)
+    content_embedding = get_style_embedding(text_content, tokenizer, style_encoder)
 
     speaker = speaker2id[speaker]
 
@@ -133,44 +108,191 @@ def tts(text, prompt, content, speaker, models):
 
     audio = infer_output["wav_predictions"].squeeze()* MAX_WAV_VALUE
     audio = audio.cpu().numpy().astype('int16')
-    sf.write(file="tmp.wav", data=audio, samplerate=config.sampling_rate)
-    return "tmp.wav"
+    sf.write(file=output_path, data=audio, samplerate=config.sampling_rate)
+    print(f"Save the generated audio to {output_path}")
 
 
-speakers = config.speakers
-models = get_models()
-g2p = G2p()
-lexicon = read_lexicon(f"./lexicon/librispeech-lexicon.txt")
+def predict(text_content, speaker, emotion, tgt_wav, agree):
+    # initialize a empty info
+    text_hint = ''
+    # agree with the terms
+    if agree == False:
+        text_hint += '[ERROR] Please accept the Terms & Condition!\n'
+        gr.Warning("Please accept the Terms & Condition!")
+        return (
+            text_hint,
+            None,
+            None,
+        )
 
-re_english_word = re.compile('([a-z\d\-\.\']+)', re.I)
+    if len(text_content) < 100:
+        text_hint += f"[ERROR] Please give a longer text \n"
+        gr.Warning("Please give a longer text")
+        return (
+            text_hint,
+            None,
+            None,
+        )
+
+    if len(text_content) > 200:
+        text_hint += f"[ERROR] Text length limited to 200 characters for this demo, please try shorter text. You can clone our open-source repo and try for your usage \n"
+        gr.Warning(
+            "Text length limited to 200 characters for this demo, please try shorter text. You can clone our open-source repo for your usage"
+        )
+        return (
+            text_hint,
+            None,
+            None,
+        )
+    src_wav = f'./temp/src-{speaker}.wav'
+    tts(text_content, emotion, speaker, models, src_wav)
+
+    try:
+        # extract the tone color features of the source speaker and target speaker
+        source_se, audio_name_src = se_extractor.get_se(src_wav, tone_color_converter, target_dir='processed', vad=True)
+        target_se, audio_name_tgt = se_extractor.get_se(tgt_wav, tone_color_converter, target_dir='processed', vad=True)
+    except Exception as e:
+        text_hint += f"[ERROR] Get source/target tone color error {str(e)} \n"
+        gr.Warning(
+            "[ERROR] Get source/target tone color error {str(e)} \n"
+        )
+        return (
+            text_hint,
+            None,
+            None,
+        )
+
+    save_path = './temp/output.wav'
+    # Run the tone color converter
+    encode_message = "@MyShell"
+    tone_color_converter.convert(
+        audio_src_path=src_wav, 
+        src_se=source_se, 
+        tgt_se=target_se, 
+        output_path=save_path,
+        message=encode_message)
+
+    text_hint += f'''Get response successfully \n'''
+
+    return (
+        text_hint,
+        src_wav,
+        save_path
+    )
 
 
-def synthesize_text(speaker, prompt, content):
-    text = g2p_cn_en(content, g2p, lexicon)
-    path = tts(text, prompt, content, speaker, models)
-    return path
+def convert_only(src_wav, tgt_wav, agree):
+    # initialize a empty info
+    text_hint = ''
+    # agree with the terms
+    if agree == False:
+        text_hint += '[ERROR] Please accept the Terms & Condition!\n'
+        gr.Warning("Please accept the Terms & Condition!")
+        return (
+            text_hint,
+            None
+        )
+    try:
+        # extract the tone color features of the source speaker and target speaker
+        source_se, audio_name_src = se_extractor.get_se(src_wav, tone_color_converter, target_dir='processed', vad=True)
+        target_se, audio_name_tgt = se_extractor.get_se(tgt_wav, tone_color_converter, target_dir='processed', vad=True)
+    except Exception as e:
+        text_hint += f"[ERROR] Get source/target tone color error {str(e)} \n"
+        gr.Warning(
+            "[ERROR] Get source/target tone color error {str(e)} \n"
+        )
+        return (
+            text_hint,
+            None,
+            None,
+        )
 
-speaker = gr.inputs.Dropdown(choices=speakers, label="Speaker ID (说话人)")
-prompt = gr.inputs.Textbox(label="Prompt (开心/悲伤)")
-content = gr.inputs.Textbox(default="合成文本", label="Text to be synthesized into speech (合成文本)")
-synthesize = gr.outputs.Audio(type="filepath")
+    src_path = src_wav
 
-gr.Interface(title="TTS with AirBox（支持中英文混合输入）", fn=synthesize_text, inputs=[speaker, prompt, content], outputs=synthesize).launch(ssl_verify=False, server_name="0.0.0.0")
+    save_path = f'{output_dir}/output.wav'
+    # Run the tone color converter
+    encode_message = "@MyShell"
+    tone_color_converter.convert(
+        audio_src_path=src_path, 
+        src_se=source_se, 
+        tgt_se=target_se, 
+        output_path=save_path,
+        message=encode_message)
 
-# def new_line(i):
-#     col1, col2, col3, col4 = st.columns([1.5, 1.5, 3.5, 1.3])
-#     with col1:
-#         speaker=st.selectbox("Speaker ID (说话人)", speakers, key=f"{i}_speaker")
-#     with col2:
-#         prompt=st.text_input("Prompt (开心/悲伤)", "", key=f"{i}_prompt")
-#     with col3:
-#         content=st.text_input("Text to be synthesized into speech (合成文本)", "合成文本", key=f"{i}_text")
-#     with col4:
-#         lang=st.selectbox("Language (语言)", ["中/英文"], key=f"{i}_lang")
+    text_hint += f'''Get response successfully \n'''
 
-#     flag = st.button(f"Synthesize (合成)", key=f"{i}_button1")
-#     if flag:
-#         text =  g2p_cn_en(content, g2p, lexicon)
-#         path = tts(i, text, prompt, content, speaker, models)
-#         st.audio(path, sample_rate=config.sampling_rate)
+    return (
+        text_hint,
+        save_path
+    )
 
+
+description = """
+# 😊😮😭Emoti Open Voice with AirBox💬
+"""
+
+with gr.Blocks(analytics_enabled=False) as demo:
+
+    with gr.Row():
+        with gr.Column():
+            with gr.Row():
+                gr.Markdown(description)
+
+    with gr.Tab('TTS + Conversion mode'):
+        with gr.Row():
+            with gr.Column():
+                speaker_gr = gr.inputs.Dropdown(choices=speakers, label="Speaker ID (原始说话人)")
+                content_gr = gr.Textbox(
+                    label="文本内容",
+                    info="One or two sentences at a time is better. Up to 200 text characters.",
+                    value="这个demo结合了EmotiVoice出色的text-to-speech功能，以及OpenVoice的音色克隆功能。快来试试看！",
+                )
+                emotion_gr = gr.inputs.Textbox(label="语调情感 (开心/悲伤/愤怒/惊讶/冷酷...)")
+                ref_gr = gr.Audio(
+                    label="目标音色",
+                    info="点击上传目标音色的音频文件",
+                    type="filepath",
+                    value="resources/demo_speaker2.mp3",
+                )
+                tos_gr = gr.Checkbox(
+                    label="Agree",
+                    value=True,
+                    info="I agree to the terms of the cc-by-nc-4.0 license-: https://github.com/myshell-ai/OpenVoice/blob/main/LICENSE",
+                )
+
+                tts_button = gr.Button("Send", elem_id="send-btn", visible=True)
+
+            with gr.Column():
+                out_text_gr = gr.Text(label="Info")
+                src_audio_gr = gr.Audio(label="TTS Audio", autoplay=True)
+                tgt_audio_gr = gr.Audio(label="Target Audio", autoplay=True)
+                tts_button.click(predict, [content_gr, speaker_gr, emotion_gr, ref_gr, tos_gr], outputs=[out_text_gr, src_audio_gr, tgt_audio_gr])
+
+    with gr.Tab('Conversion-only mode'):
+        with gr.Row():
+            with gr.Column():
+                cvt_src_gr = gr.Audio(
+                    label="Source Audio",
+                    info="Click on the ✎ button to upload your own source speaker audio",
+                    type="filepath",
+                )
+                cvt_ref_gr = gr.Audio(
+                    label="Reference Audio",
+                    info="Click on the ✎ button to upload your own target speaker audio",
+                    type="filepath",
+                    value="resources/demo_speaker2.mp3",
+                )
+                cvt_tos_gr = gr.Checkbox(
+                    label="Agree",
+                    value=True,
+                    info="I agree to the terms of the cc-by-nc-4.0 license-: https://github.com/myshell-ai/OpenVoice/blob/main/LICENSE",
+                )
+                cvt_button = gr.Button("Send", elem_id="send-btn", visible=True)
+            with gr.Column():
+                out_text_gr = gr.Text(label="Info")
+                cvt_audio_gr = gr.Audio(label="Synthesised Audio", autoplay=True)
+                cvt_button.click(convert_only, [cvt_src_gr, cvt_ref_gr, cvt_tos_gr], outputs=[out_text_gr, cvt_audio_gr])
+
+
+demo.queue()  
+demo.launch(debug=True, show_api=True, share=False, server_name="0.0.0.0")

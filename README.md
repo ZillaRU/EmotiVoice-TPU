@@ -1,12 +1,14 @@
-# Run EmotiVoice on your Airbox
+# Run Emoti-OpenVoice on your Airbox
 This repo is a BM1684X-adapted demo of NetEase YouDao EmotiVoice.
 
-## 1. Download bmodels and put them in `./model_file`.
+## 1. Download bmodels.
 ```sh
 python3 -m pip install dfn
 python3 -m dfn --url https://disk.sophgo.vip/sharing/KymDuWLGw
 ```
 Put the model files in `./model_file`.
+
+Download bmodels of OpenVoice tone color converter [here](https://drive.google.com/file/d/1ErVDiMFvTwRj649pyoJI7rRDAh5pTGVT/view?usp=drive_link) and run `tar -zxfv checkpoints.tar.gz`.
 
 ## 2. Then run:
 ```sh

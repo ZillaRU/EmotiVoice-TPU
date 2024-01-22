@@ -28,6 +28,7 @@ import se_extractor
 from api import ToneColorConverter
 import base64
 from pathlib import Path
+import uuid
 
 DEVICE = "cpu"
 MAX_WAV_VALUE = 32768.0
@@ -80,7 +81,7 @@ def get_style_embedding(prompt_text, tokenizer, style_encoder):
 
 def tts(text_content, emotion, speaker, models, output_path):
     text = g2p_cn_en(text_content, g2p, lexicon)
-    (style_encoder, generator, tokenizer, token2id, speaker2id)=models
+    (style_encoder, generator, tokenizer, token2id, speaker2id) = models
 
     style_embedding = get_style_embedding(emotion, tokenizer, style_encoder)
     content_embedding = get_style_embedding(text_content, tokenizer, style_encoder)
@@ -111,6 +112,10 @@ def tts(text_content, emotion, speaker, models, output_path):
     sf.write(file=output_path, data=audio, samplerate=config.sampling_rate)
     print(f"Save the generated audio to {output_path}")
 
+def tts_only(text_content, speaker, emotion):
+    res_wav = f'./temp/speaker{speaker}-{uuid.uuid4()}.wav'
+    tts(text_content, emotion, speaker, models, res_wav)
+    return res_wav
 
 def predict(text_content, speaker, emotion, tgt_wav, agree):
     # initialize a empty info
@@ -125,7 +130,7 @@ def predict(text_content, speaker, emotion, tgt_wav, agree):
             None,
         )
 
-    if len(text_content) < 100:
+    if len(text_content) < 30:
         text_hint += f"[ERROR] Please give a longer text \n"
         gr.Warning("Please give a longer text")
         return (
@@ -237,17 +242,27 @@ with gr.Blocks(analytics_enabled=False) as demo:
         with gr.Column():
             with gr.Row():
                 gr.Markdown(description)
-
+    with gr.Tab('TTS mode'):
+        with gr.Row():
+            with gr.Column():
+                speaker_gr = gr.Dropdown(choices=speakers, label="Speaker ID (说话人)")
+                emotion_gr = gr.Textbox(label="情感 (开心/悲伤)")
+                content_gr = gr.Textbox(label="需要合成的文本")
+                tts_button = gr.Button("生成", elem_id="send-btn", visible=True)
+            with gr.Column():
+                synthesize = gr.Audio(type="filepath")
+                tts_button.click(tts_only, [content_gr, speaker_gr, emotion_gr], outputs=[synthesize])
+    
     with gr.Tab('TTS + Conversion mode'):
         with gr.Row():
             with gr.Column():
-                speaker_gr = gr.inputs.Dropdown(choices=speakers, label="Speaker ID (原始说话人)")
+                speaker_gr = gr.Dropdown(choices=speakers, label="Speaker ID (原始说话人)")
                 content_gr = gr.Textbox(
                     label="文本内容",
                     info="One or two sentences at a time is better. Up to 200 text characters.",
-                    value="这个demo结合了EmotiVoice出色的text-to-speech功能，以及OpenVoice的音色克隆功能。快来试试看！",
+                    value="You got a dream, you gotta protect it. People can't do something themselves, they manna tell you you can't do it. If you want something, go get it. Period.",
                 )
-                emotion_gr = gr.inputs.Textbox(label="语调情感 (开心/悲伤/愤怒/惊讶/冷酷...)")
+                emotion_gr = gr.Textbox(label="语调情感 (开心/悲伤/愤怒/惊讶/冷酷...)")
                 ref_gr = gr.Audio(
                     label="目标音色",
                     info="点击上传目标音色的音频文件",
@@ -260,7 +275,7 @@ with gr.Blocks(analytics_enabled=False) as demo:
                     info="I agree to the terms of the cc-by-nc-4.0 license-: https://github.com/myshell-ai/OpenVoice/blob/main/LICENSE",
                 )
 
-                tts_button = gr.Button("Send", elem_id="send-btn", visible=True)
+                tts_button = gr.Button("生成", elem_id="send-btn", visible=True)
 
             with gr.Column():
                 out_text_gr = gr.Text(label="Info")
@@ -287,7 +302,7 @@ with gr.Blocks(analytics_enabled=False) as demo:
                     value=True,
                     info="I agree to the terms of the cc-by-nc-4.0 license-: https://github.com/myshell-ai/OpenVoice/blob/main/LICENSE",
                 )
-                cvt_button = gr.Button("Send", elem_id="send-btn", visible=True)
+                cvt_button = gr.Button("转换", elem_id="send-btn", visible=True)
             with gr.Column():
                 out_text_gr = gr.Text(label="Info")
                 cvt_audio_gr = gr.Audio(label="Synthesised Audio", autoplay=True)

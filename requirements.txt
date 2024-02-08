@@ -1,4 +1,7 @@
 jieba
 pypinyin
 g2p_en
+librosa
 soundfile
+gradio
+whisper_timestamped

@@ -15,13 +15,13 @@ class PromptTTS(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
         
-        self.encoder = EngineOV('./model_file/jit_am_encoder_1-512-384_1-1-512.bmodel')
+        self.encoder = EngineOV('./model_file/tts/jit_am_encoder_1-512-384_1-1-512.bmodel')
 
-        self.decoder = EngineOV('./model_file/onnx_am_decoder_1-2048-384.bmodel')
+        self.decoder = EngineOV('./model_file/tts/onnx_am_decoder_1-2048-384.bmodel')
 
-        self.duration_predictor = EngineOV('./model_file/am_durationpred-1_512_384-1_512_1.bmodel')
+        self.duration_predictor = EngineOV('./model_file/tts/am_durationpred-1_512_384-1_512_1.bmodel')
 
-        self.pitch_predictor = EngineOV('./model_file/am_pitchpred-1_512_384-1_512_1.bmodel')
+        self.pitch_predictor = EngineOV('./model_file/tts/am_pitchpred-1_512_384-1_512_1.bmodel')
 
         self.pitch_embed = torch.nn.Sequential(
             torch.nn.Conv1d(
@@ -32,7 +32,7 @@ class PromptTTS(nn.Module):
             ),
             torch.nn.Dropout(config.model.variance_embde_p_dropout), #pitch_embed_dropout=0.0
         )
-        self.energy_predictor = EngineOV('./model_file/am_energypred-1_512_384-1_512_1.bmodel')
+        self.energy_predictor = EngineOV('./model_file/tts/am_energypred-1_512_384-1_512_1.bmodel')
 
         self.energy_embed = torch.nn.Sequential(
             torch.nn.Conv1d(
@@ -56,7 +56,7 @@ class PromptTTS(nn.Module):
         self.src_word_emb =  nn.Embedding(config.n_vocab, config.model.encoder_n_hidden)  # torch.from_numpy(np.load('./model_file/src_word_emb.npy')) # nn.Embedding(config.n_vocab, config.model.encoder_n_hidden)
         self.embed_projection1 = nn.Linear(config.model.encoder_n_hidden * 2 + config.model.bert_embedding * 2, config.model.encoder_n_hidden)
         
-        model_para_dict = torch.load('./model_file/am_rest_weight.pth')
+        model_para_dict = torch.load('./model_file/tts/am_rest_weight.pth')
         self.load_my_state_dict(model_para_dict)
     
     # inputs_ling [1, seq_len] max:512

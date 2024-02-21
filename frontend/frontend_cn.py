@@ -12,12 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import re
 from pypinyin import pinyin, lazy_pinyin, Style
 import jieba
 import string
-from cn2an.an2cn import An2Cn
+from .cn2an.an2cn import An2Cn
 
 re_special_pinyin = re.compile(r'^(n|ng|m)$')
 def split_py(py):

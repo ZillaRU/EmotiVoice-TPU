@@ -32,7 +32,7 @@ class ClassificationHead(nn.Module):
 class StyleEncoder(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
-        self.bert = EngineOV('./model_file/bert_poolout1-768_1-512_1-512_1-512.bmodel')
+        self.bert = EngineOV('./model_file/tts/bert_poolout1-768_1-512_1-512_1-512.bmodel')
         # self.bert_torch = AutoModel.from_pretrained(config.bert_path)
         self.bert_max_len = 512
         self.pitch_clf = ClassificationHead(config.bert_hidden_size, config.pitch_n_labels)

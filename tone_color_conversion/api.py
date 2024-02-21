@@ -2,13 +2,12 @@ import torch
 import numpy as np
 import re
 import soundfile
-import commons
 import os
 import librosa
-from mel_processing import spectrogram_torch
-from converter import SynthesizerTrn
 from models import EngineOV
-import utils
+from .mel_processing import spectrogram_torch
+from .converter import SynthesizerTrn
+from .utils import get_hparams_from_file
 
 
 class OpenVoiceBaseClass(object):
@@ -18,7 +17,7 @@ class OpenVoiceBaseClass(object):
         if 'cuda' in device:
             assert torch.cuda.is_available()
 
-        hps = utils.get_hparams_from_file(config_path)
+        hps = get_hparams_from_file(config_path)
 
         model = SynthesizerTrn(
             len(getattr(hps, 'symbols', [])),
@@ -40,7 +39,7 @@ class OpenVoiceBaseClass(object):
             del self.model.dec
             self.model.dec = EngineOV(os.path.join(ckpt_path, f'decoder_{max_len}_{quantize}.bmodel'), device_id=0)
         print("Loaded checkpoint '{}'".format(ckpt_path))
-        print('missing/unexpected keys:', a, b)
+        # print('missing/unexpected keys:', a, b)
 
 
 class ToneColorConverter(OpenVoiceBaseClass):

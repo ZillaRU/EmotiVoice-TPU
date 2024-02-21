@@ -14,6 +14,8 @@
 
 import gradio as gr
 import os, glob
+os.environ["LD_PRELOAD"] = "/usr/lib/aarch64-linux-gnu/libgomp.so.1"
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import numpy as np
 from yacs import config as CONFIG
 import torch
@@ -23,15 +25,15 @@ from frontend import g2p_cn_en, G2p, read_lexicon
 from config.config import Config
 from models.prompt_tts_modified.jets import JETSGenerator
 from models.prompt_tts_modified.simbert import StyleEncoder
+from tone_color_conversion import ToneColorConverter, get_se
 from transformers import AutoTokenizer
-import se_extractor
-from api import ToneColorConverter
 import base64
 from pathlib import Path
 import uuid
 
 DEVICE = "cpu"
 MAX_WAV_VALUE = 32768.0
+
 
 config = Config()
 
@@ -57,7 +59,7 @@ def get_models():
 speakers = config.speakers
 models = get_models()
 g2p = G2p()
-lexicon = read_lexicon(f"./lexicon/librispeech-lexicon.txt")
+lexicon = read_lexicon()
 tone_color_converter = ToneColorConverter(f'./model_file/converter/config.json', device=DEVICE)
 
 
@@ -154,8 +156,8 @@ def predict(text_content, speaker, emotion, tgt_wav, agree):
 
     try:
         # extract the tone color features of the source speaker and target speaker
-        source_se, audio_name_src = se_extractor.get_se(src_wav, tone_color_converter, target_dir='processed', vad=True)
-        target_se, audio_name_tgt = se_extractor.get_se(tgt_wav, tone_color_converter, target_dir='processed', vad=True)
+        source_se, audio_name_src = get_se(src_wav, tone_color_converter, target_dir='processed', vad=True)
+        target_se, audio_name_tgt = get_se(tgt_wav, tone_color_converter, target_dir='processed', vad=True)
     except Exception as e:
         text_hint += f"[ERROR] Get source/target tone color error {str(e)} \n"
         gr.Warning(
@@ -199,8 +201,8 @@ def convert_only(src_wav, tgt_wav, agree):
         )
     try:
         # extract the tone color features of the source speaker and target speaker
-        source_se, audio_name_src = se_extractor.get_se(src_wav, tone_color_converter, target_dir='processed', vad=True)
-        target_se, audio_name_tgt = se_extractor.get_se(tgt_wav, tone_color_converter, target_dir='processed', vad=True)
+        source_se, audio_name_src = get_se(src_wav, tone_color_converter, target_dir='processed', vad=True)
+        target_se, audio_name_tgt = get_se(tgt_wav, tone_color_converter, target_dir='processed', vad=True)
     except Exception as e:
         text_hint += f"[ERROR] Get source/target tone color error {str(e)} \n"
         gr.Warning(
@@ -256,18 +258,17 @@ with gr.Blocks(analytics_enabled=False) as demo:
     with gr.Tab('TTS + Conversion mode'):
         with gr.Row():
             with gr.Column():
-                speaker_gr = gr.Dropdown(choices=speakers, label="Speaker ID (原始说话人)")
+                speaker_gr = gr.Dropdown(choices=speakers, label="原始说话人ID")
                 content_gr = gr.Textbox(
                     label="文本内容",
                     info="One or two sentences at a time is better. Up to 200 text characters.",
-                    value="You got a dream, you gotta protect it. People can't do something themselves, they manna tell you you can't do it. If you want something, go get it. Period.",
+                    value="You got a dream, you gotta protect it. People can't do something themselves, they wanna tell you you can't do it. If you want something, go get it. Period.",
                 )
                 emotion_gr = gr.Textbox(label="语调情感 (开心/悲伤/愤怒/惊讶/冷酷...)")
                 ref_gr = gr.Audio(
                     label="目标音色",
                     info="点击上传目标音色的音频文件",
                     type="filepath",
-                    value="resources/demo_speaker2.mp3",
                 )
                 tos_gr = gr.Checkbox(
                     label="Agree",
@@ -295,7 +296,6 @@ with gr.Blocks(analytics_enabled=False) as demo:
                     label="Reference Audio",
                     info="Click on the ✎ button to upload your own target speaker audio",
                     type="filepath",
-                    value="resources/demo_speaker2.mp3",
                 )
                 cvt_tos_gr = gr.Checkbox(
                     label="Agree",

@@ -15,7 +15,7 @@ from whisper_timestamped.transcribe import get_audio_tensor, get_vad_segments
 def split_audio_vad(audio_path, audio_name, target_dir, split_seconds=10.0):
     SAMPLE_RATE = 16000
     audio_vad = get_audio_tensor(audio_path)
-    import time; st = time.time()
+    # import time; st = time.time()
     segments = get_vad_segments(
         audio_vad,
         output_sample=True,
@@ -23,7 +23,7 @@ def split_audio_vad(audio_path, audio_name, target_dir, split_seconds=10.0):
         min_silence_duration=1,
         method="silero",
     )
-    print(f'vad time: {time.time() - st}')
+    # print(f'vad time: {time.time() - st}')
     segments = [(seg["start"], seg["end"]) for seg in segments]
     segments = [(float(s) / SAMPLE_RATE, float(e) / SAMPLE_RATE) for s,e in segments]
     print(segments)

@@ -3,15 +3,11 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 import time
-import commons
-import modules
-import attentions
-# from npuengine import EngineOV
 from torch.nn import Conv1d, ConvTranspose1d, Conv2d
 from torch.nn.utils import weight_norm, remove_weight_norm, spectral_norm
+from .commons import init_weights, get_padding, sequence_mask
+from . import modules
 
-from commons import init_weights, get_padding
-     
 
 class PosteriorEncoder(nn.Module):
     def __init__(
@@ -44,7 +40,7 @@ class PosteriorEncoder(nn.Module):
         self.proj = nn.Conv1d(hidden_channels, out_channels * 2, 1)
 
     def forward(self, x, x_lengths, g=None, tau=1.0):
-        x_mask = torch.unsqueeze(commons.sequence_mask(x_lengths, x.size(2)), 1).to(
+        x_mask = torch.unsqueeze(sequence_mask(x_lengths, x.size(2)), 1).to(
             x.dtype
         )
         x = self.pre(x) * x_mask

@@ -27,8 +27,8 @@ class JETSGenerator(nn.Module):
         super().__init__()
         self.upsample_factor=int(np.prod(config.model.upsample_rates))
         self.segment_size = config.segment_size
-        self.am =  PromptTTS(config)  # torch.load('./model_file/am_model.pth')
-        self.generator = EngineOV('./model_file/hifigan_1-80-1024_F16.bmodel')
+        self.am =  PromptTTS(config)
+        self.generator = EngineOV('./model_file/tts/hifigan_1-80-1024_F16.bmodel')
         self.config=config
 
 

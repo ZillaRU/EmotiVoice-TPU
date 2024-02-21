@@ -17,15 +17,9 @@ import re
 import argparse
 from string import punctuation
 import numpy as np
-
 from g2p_en import G2p
 
-import os
-
-
-ROOT_DIR = os.path.dirname(os.path.abspath("__file__"))
-
-def read_lexicon(lex_path):
+def read_lexicon(lex_path='./frontend/lexicon/librispeech-lexicon.txt'):
     lexicon = {}
     with open(lex_path) as f:
         for line in f:

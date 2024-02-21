@@ -14,7 +14,7 @@ import soundfile as sf
 
 
 app = Flask(__name__)
-lexicon = read_lexicon(f"./lexicon/librispeech-lexicon.txt")
+lexicon = read_lexicon()
 g2p = G2p()
 
 MAX_WAV_VALUE = 32768.0

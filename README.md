@@ -45,6 +45,7 @@ cd ~/.cache/torch/hub/
 unzip master.zip
 rm master.zip
 mv snakers4-silero-vad-6c8d844 snakers4_silero-vad_master
+echo "export LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libgomp.so.1" >> ~/.bashrc
 cd -
 python3 demo_page.py
 ```

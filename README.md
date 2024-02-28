@@ -6,10 +6,13 @@ This repo is a BM1684X-adapted demo of EmotiVoice(@NetEase Youdao) and OpenVoice
 ```sh
 python3 -m pip install dfn
 python3 -m dfn --url https://disk.sophgo.vip/sharing/KymDuWLGw
+unzip EmotiVoice.zip
+mv EmotiVoice model_file/tts
+rm EmotiVoice.zip
 ```
-- Download bmodels of OpenVoice tone color converter [here](https://drive.google.com/file/d/1ErVDiMFvTwRj649pyoJI7rRDAh5pTGVT/view?usp=drive_link) and run `tar zxfv checkpoints.tar.gz`.
+- Download bmodels of OpenVoice tone color converter [here](https://drive.google.com/file/d/1ErVDiMFvTwRj649pyoJI7rRDAh5pTGVT/view?usp=drive_link) and run `tar zxfv checkpoints.tar.gz`, `mv checkpoints/converter model_file/converter`, `rm -rf checkpoints.tar.gz checkpoints`.
 
-- The `model_file`` directory should be organized as:
+- The `model_file` directory should be organized as:
 ```
 model_file
 ├── converter

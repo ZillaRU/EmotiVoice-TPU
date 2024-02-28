@@ -1,7 +1,7 @@
 jieba
 pypinyin
 g2p_en
-gradio
+gradio==4.19.2
 whisper_timestamped
 torch
 torchaudio

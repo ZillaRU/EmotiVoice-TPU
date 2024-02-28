@@ -41,6 +41,11 @@ sudo apt-get install libsndfile1 -y
 pip3 install torch torchaudio
 pip3 install numpy numba scipy transformers==4.26.1 librosa soundfile yacs g2p_en jieba pypinyin whisper_timestamped onnxruntime gradio==4.19.2
 mv assets/master.zip ~/.cache/torch/hub/
+cd ~/.cache/torch/hub/
+unzip master.zip
+rm master.zip
+mv snakers4-silero-vad-6c8d844 snakers4_silero-vad_master
+cd -
 python3 demo_page.py
 ```
 

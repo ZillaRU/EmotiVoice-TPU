@@ -216,7 +216,7 @@ def convert_only(src_wav, tgt_wav, agree):
 
     src_path = src_wav
 
-    save_path = f'{output_dir}/output.wav'
+    save_path = f'./temp/output.wav'
     # Run the tone color converter
     encode_message = "@MyShell"
     tone_color_converter.convert(

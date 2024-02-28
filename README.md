@@ -39,7 +39,7 @@ model_file
 ```sh
 sudo apt-get install libsndfile1 -y
 pip3 install torch torchaudio
-pip3 install numpy numba scipy transformers==4.26.1 librosa soundfile yacs g2p_en jieba pypinyin whisper_timestamped onnxruntime gradio
+pip3 install numpy numba scipy transformers==4.26.1 librosa soundfile yacs g2p_en jieba pypinyin whisper_timestamped onnxruntime gradio==4.19.2
 mv master.zip ~/.cache/torch/hub/
 python3 demo_page.py
 ```

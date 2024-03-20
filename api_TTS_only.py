@@ -10,9 +10,10 @@ import base64
 from models.prompt_tts_modified.jets import JETSGenerator
 from models.prompt_tts_modified.simbert import StyleEncoder
 from yacs import config as CONFIG
-import soundfile as sf
+import soundfile as SF
 
 
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 app = Flask(__name__)
 lexicon = read_lexicon()
 g2p = G2p()

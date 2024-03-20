@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from pydub import AudioSegment
 from config import Config
 
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 MAX_WAV_VALUE = 32768.0
 
 class EmotiVoicePipeline:

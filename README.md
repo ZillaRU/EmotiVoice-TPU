@@ -1,5 +1,5 @@
 # Run Emoti-OpenVoice on your Airbox
-This repo is a BM1684X-adapted demo of EmotiVoice(@NetEase Youdao) and OpenVoice(@MyShell.ai).
+This repo is a SG2300x-adapted demo of EmotiVoice(@NetEase Youdao) and OpenVoice(@MyShell.ai).
 
 ## 1. Download bmodels.
 - Download the bmodels for EmotiVoice.

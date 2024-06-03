@@ -10,6 +10,8 @@ unzip EmotiVoice.zip
 mv EmotiVoice model_file/tts
 rm EmotiVoice.zip
 ```
+**if you have no access to sophgo disk, you can use [baidu disk](https://pan.baidu.com/s/192mBCj_FZbXhI_sCij0tSg?pwd=abox ) instead.**
+
 - Download bmodels of OpenVoice tone color converter [here](https://drive.google.com/file/d/1ErVDiMFvTwRj649pyoJI7rRDAh5pTGVT/view?usp=drive_link) and run `tar zxfv checkpoints.tar.gz`, `mv checkpoints/converter model_file/converter`, `rm -rf checkpoints.tar.gz checkpoints`.
 
 - The `model_file` directory should be organized as:

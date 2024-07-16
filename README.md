@@ -8,6 +8,7 @@ This repo is a SG2300x-adapted demo of EmotiVoice(@NetEase Youdao) and OpenVoice
 ## 1. Download bmodels.
 - Download the bmodels for EmotiVoice.
 ```sh
+cd EmotiVoice-TPU
 python3 -m pip install dfn
 python3 -m dfn --url https://disk.sophgo.vip/sharing/KymDuWLGw
 unzip EmotiVoice.zip

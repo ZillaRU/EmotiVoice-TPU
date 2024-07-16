@@ -267,7 +267,7 @@ with gr.Blocks(analytics_enabled=False) as demo:
                 emotion_gr = gr.Textbox(label="语调情感 (开心/悲伤/愤怒/惊讶/冷酷...)")
                 ref_gr = gr.Audio(
                     label="目标音色",
-                    info="点击上传目标音色的音频文件",
+                    #info="点击上传目标音色的音频文件",
                     type="filepath",
                 )
                 tos_gr = gr.Checkbox(
@@ -289,12 +289,12 @@ with gr.Blocks(analytics_enabled=False) as demo:
             with gr.Column():
                 cvt_src_gr = gr.Audio(
                     label="Source Audio",
-                    info="Click on the ✎ button to upload your own source speaker audio",
+                    #info="Click on the ✎ button to upload your own source speaker audio",
                     type="filepath",
                 )
                 cvt_ref_gr = gr.Audio(
                     label="Reference Audio",
-                    info="Click on the ✎ button to upload your own target speaker audio",
+                    #info="Click on the ✎ button to upload your own target speaker audio",
                     type="filepath",
                 )
                 cvt_tos_gr = gr.Checkbox(

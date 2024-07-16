@@ -1,6 +1,10 @@
 # Run Emoti-OpenVoice on your Airbox
 This repo is a SG2300x-adapted demo of EmotiVoice(@NetEase Youdao) and OpenVoice(@MyShell.ai).
 
+## 0. Clone the repository.
+
+`git clone https://github.com/ZillaRU/EmotiVoice-TPU.git`
+
 ## 1. Download bmodels.
 - Download the bmodels for EmotiVoice.
 ```sh

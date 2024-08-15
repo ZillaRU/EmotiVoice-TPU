@@ -43,9 +43,19 @@ model_file
 
 
 ## 2. Run web demo:
+Install tpu-perf for SoC or PCIE mode.
+- For SoC (Airbox)
+```sh
+pip3 install https://github.com/radxa-edge/TPU-Edge-AI/releases/download/v0.1.0/tpu_perf-1.2.31-py3-none-manylinux2014_aarch64.whl
+```
+- For PCIE
+```sh
+pip3 install https://github.com/radxa-edge/TPU-Edge-AI/releases/download/v0.1.0/tpu_perf-1.2.31-py3-none-manylinux2014_x86_64.whl
+```
+Then run the following script.
 ```sh
 sudo apt-get install libsndfile1 -y
-pip3 install torch torchaudio
+pip3 install torch==2.0.1 torchaudio==2.0.2
 pip3 install numpy numba scipy transformers==4.26.1 librosa soundfile yacs g2p_en jieba pypinyin whisper_timestamped onnxruntime gradio==4.19.2
 mv assets/master.zip ~/.cache/torch/hub/
 cd ~/.cache/torch/hub/
@@ -57,6 +67,8 @@ source ~/.bashrc
 cd -
 python3 demo_page.py
 ```
+*The torch version higher than 2.3 might lead to an ERROR due to poor compatibility for ARM.*
+
 ## 3. Using OpenAi-like api
 - Install the dependencies: `pip3 install fastapi pydub uvicorn[standard] pyrubberband`.
 - Then, run `uvicorn openai_api:app --reload --host 0.0.0.0 --port [port_number]`, the service will be available at `hostip:port_number` in few seconds.

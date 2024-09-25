@@ -25,36 +25,25 @@ class OpenVoiceBaseClass(object):
             n_speakers=hps.data.n_speakers,
             **hps.model,
         ).to(device)
-
         model.eval()
         self.model = model
         self.hps = hps
         self.device = device
-
-    def load_ckpt(self, ckpt_path, max_len=1024, quantize='f16'):
-        checkpoint_dict = torch.load(os.path.join(ckpt_path,'checkpoint.pth'), map_location=torch.device(self.device))
-        a, b = self.model.load_state_dict(checkpoint_dict['model'], strict=False)
-        if os.path.exists(os.path.join(ckpt_path, f'decoder_{max_len}_{quantize}.bmodel')):
-            self.model.dec = None
-            del self.model.dec
-            self.model.dec = EngineOV(os.path.join(ckpt_path, f'decoder_{max_len}_{quantize}.bmodel'), device_id=0)
-        print("Loaded checkpoint '{}'".format(ckpt_path))
-        # print('missing/unexpected keys:', a, b)
 
 
 class ToneColorConverter(OpenVoiceBaseClass):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        if False:#kwargs.get('enable_watermark', True):
+        if False: #kwargs.get('enable_watermark', True):
             import wavmark
             self.watermark_model = wavmark.load_model().to(self.device)
         else:
             self.watermark_model = None
-        self.load_ckpt("./model_file/converter", max_len=2048)
+        # self.load_ckpt("./model_file/converter", max_len=2048)
 
 
-    def extract_se(self, ref_wav_list, se_save_path=None):
+    def extract_se(self, ref_wav_list, se_save_path=None, max_len=1024):
         if isinstance(ref_wav_list, str):
             ref_wav_list = [ref_wav_list]
         
@@ -71,7 +60,14 @@ class ToneColorConverter(OpenVoiceBaseClass):
                                         hps.data.sampling_rate, hps.data.hop_length, hps.data.win_length,
                                         center=False).to(device)
             with torch.no_grad():
-                g = self.model.ref_enc(y.transpose(1, 2)).unsqueeze(-1)
+                _len = y.shape[2]
+                if _len < max_len:
+                    y = torch.cat([y, torch.zeros(1, y.shape[1], max_len-y.shape[2])], axis=2)
+                else:
+                    y = y[:,:,:max_len]
+                    print(f'===== WARNING =====: Your input ({y.shape[2]}) exceeds the length limit ({max_len}). The output is incomplete.')
+                y = y.transpose(1, 2)
+                g = torch.from_numpy(self.model.ref_enc([y.numpy()])[0]).unsqueeze(-1)[:(max_len//4-_len//max_len)]
                 gs.append(g.detach())
         gs = torch.stack(gs).mean(0)
 

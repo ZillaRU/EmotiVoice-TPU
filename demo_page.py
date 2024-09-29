@@ -18,8 +18,8 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import numpy as np
 from yacs import config as CONFIG
 import torch
-import re
 import soundfile as sf
+
 from frontend import g2p_cn_en, G2p, read_lexicon
 from config.config import Config
 from models.prompt_tts_modified.jets import JETSGenerator
@@ -32,7 +32,6 @@ import uuid
 
 DEVICE = "cpu"
 MAX_WAV_VALUE = 32768.0
-
 
 config = Config()
 
@@ -77,7 +76,7 @@ def get_style_embedding(prompt_text, tokenizer, style_encoder):
         style_embedding = output["pooled_output"].cpu().squeeze().numpy()
     return style_embedding
 
-def tts(text_content, emotion, speaker, output_path):
+def tts(text_content, emotion, speaker, output_path, models, g2p, lexicon):
     text = g2p_cn_en(text_content, g2p, lexicon)
     (style_encoder, generator, tokenizer, token2id, speaker2id) = models
 
@@ -110,128 +109,95 @@ def tts(text_content, emotion, speaker, output_path):
     sf.write(file=output_path, data=audio, samplerate=config.sampling_rate)
     print(f"Save the generated audio to {output_path}")
 
-def tts_only(text_content, speaker, emotion):
-    res_wav = f'./temp/speaker{speaker}-{uuid.uuid4()}.wav'
-    tts(text_content, emotion, speaker, res_wav)
-    return res_wav
-
-def convert_only(src_wav, tgt_wav, agree=True):
-    # initialize a empty info
-    text_hint = ''
-    # agree with the terms
-    if agree == False:
-        text_hint += '[ERROR] Please accept the Terms & Condition!\n'
-        gr.Warning("Please accept the Terms & Condition!")
-        return (
-            text_hint,
-            None
-        )
+def convert(src_wav, tgt_wav, save_path="./temp/output.wav", encode_message=""):
     try:
         # extract the tone color features of the source speaker and target speaker
-        source_se, audio_name_src = get_se(src_wav, tone_color_converter, target_dir='processed', vad=True)
-        target_se, audio_name_tgt = get_se(tgt_wav, tone_color_converter, target_dir='processed', vad=True)
+        source_se, _ = get_se(src_wav, tone_color_converter, target_dir='processed', vad=True)
+        target_se, _  = get_se(tgt_wav, tone_color_converter, target_dir='processed', vad=True)
     except Exception as e:
         text_hint += f"[ERROR] Get source/target tone color error {str(e)} \n"
-        gr.Warning(
-            "[ERROR] Get source/target tone color error {str(e)} \n"
-        )
-        return (
-            text_hint,
-            None,
-            None,
-        )
-
-    src_path = src_wav
-
-    save_path = f'./temp/output.wav'
-    # Run the tone color converter
-    encode_message = "@MyShell"
-    tone_color_converter.convert(
-        audio_src_path=src_path, 
-        src_se=source_se, 
-        tgt_se=target_se, 
-        output_path=save_path,
-        message=encode_message)
-
-    text_hint += f'''Get response successfully \n'''
-
-    return (
-        text_hint,
-        save_path
-    )
-
-def predict(text_content, speaker, emotion, tgt_wav, agree):
-    # initialize a empty info
-    text_hint = ''
-    # agree with the terms
-    if agree == False:
-        text_hint += '[ERROR] Please accept the Terms & Condition!\n'
-        gr.Warning("Please accept the Terms & Condition!")
-        return (
-            text_hint,
-            None,
-            None,
-        )
-
-    if len(text_content) < 30:
-        text_hint += f"[ERROR] Please give a longer text \n"
-        gr.Warning("Please give a longer text")
-        return (
-            text_hint,
-            None,
-            None,
-        )
-
-    if len(text_content) > 200:
-        text_hint += f"[ERROR] Text length limited to 200 characters for this demo, please try shorter text. You can clone our open-source repo and try for your usage \n"
-        gr.Warning(
-            "Text length limited to 200 characters for this demo, please try shorter text. You can clone our open-source repo for your usage"
-        )
-        return (
-            text_hint,
-            None,
-            None,
-        )
-
-    src_wav = f'./temp/src-{speaker}.wav'
-    tts(text_content, emotion, speaker, src_wav)
-
-    try:
-        # extract the tone color features of the source speaker and target speaker
-        source_se, audio_name_src = get_se(src_wav, tone_color_converter, target_dir='processed', vad=True)
-        target_se, audio_name_tgt = get_se(tgt_wav, tone_color_converter, target_dir='processed', vad=True)
-    except Exception as e:
-        text_hint += f"[ERROR] Get source/target tone color error {str(e)} \n"
-        gr.Warning(
-            "[ERROR] Get source/target tone color error {str(e)} \n"
-        )
-        return (
-            text_hint,
-            None,
-            None,
-        )
-
-    save_path = './temp/output.wav'
-    # Run the tone color converter
-    encode_message = "@MyShell"
     tone_color_converter.convert(
         audio_src_path=src_wav, 
         src_se=source_se, 
         tgt_se=target_se, 
         output_path=save_path,
         message=encode_message)
-
-    text_hint += f'''Get response successfully \n'''
-
-    return (
-        text_hint,
-        src_wav,
-        save_path
-    )
+    return save_path
 
 if __name__ == '__main__':
-
     import gradio as gr
+
+    def tts_only(text_content, speaker, emotion):
+        res_wav = f'./temp/speaker{speaker}-{uuid.uuid4()}.wav'
+        tts(text_content, emotion, speaker, res_wav, models, g2p, lexicon)
+        return res_wav
+
+    def convert_only(src_wav, tgt_wav, agree=True):
+        # initialize a empty info
+        text_hint = ''
+        # agree with the terms
+        if agree == False:
+            text_hint += '[ERROR] Please accept the Terms & Condition!\n'
+            gr.Warning("Please accept the Terms & Condition!")
+            return (
+                text_hint,
+                None
+            )
+        save_path = "./temp/output.wav"
+        convert(src_wav, tgt_wav, save_path, encode_message="Airbox")
+
+        text_hint += f'''Get response successfully \n'''
+
+        return (
+            text_hint,
+            save_path
+        )
+
+    def predict(text_content, speaker, emotion, tgt_wav, agree):
+        # initialize a empty info
+        text_hint = ''
+        # agree with the terms
+        if agree == False:
+            text_hint += '[ERROR] Please accept the Terms & Condition!\n'
+            gr.Warning("Please accept the Terms & Condition!")
+            return (
+                text_hint,
+                None,
+                None,
+            )
+
+        if len(text_content) < 30:
+            text_hint += f"[ERROR] Please give a longer text \n"
+            gr.Warning("Please give a longer text")
+            return (
+                text_hint,
+                None,
+                None,
+            )
+
+        if len(text_content) > 200:
+            text_hint += f"[ERROR] Text length limited to 200 characters for this demo, please try shorter text. You can clone our open-source repo and try for your usage \n"
+            gr.Warning(
+                "Text length limited to 200 characters for this demo, please try shorter text. You can clone our open-source repo for your usage"
+            )
+            return (
+                text_hint,
+                None,
+                None,
+            )
+
+        src_wav = f'./temp/src-{speaker}.wav'
+        tts(text_content, emotion, speaker, src_wav, models, g2p, lexicon)
+        save_path = './temp/output.wav'
+        convert(src_wav, tgt_wav, save_path, "Airbox")
+
+        text_hint += f'''Get response successfully \n'''
+
+        return (
+            text_hint,
+            src_wav,
+            save_path
+        )
 
     speakers = config.speakers
 
@@ -312,6 +278,5 @@ if __name__ == '__main__':
                     cvt_audio_gr = gr.Audio(label="Synthesised Audio", autoplay=True)
                     cvt_button.click(convert_only, [cvt_src_gr, cvt_ref_gr, cvt_tos_gr], outputs=[out_text_gr, cvt_audio_gr])
 
-
     demo.queue()  
-    demo.launch(debug=True, show_api=True, share=False, server_name="0.0.0.0")
+    demo.launch(debug=False, show_api=True, share=False, server_name="0.0.0.0")

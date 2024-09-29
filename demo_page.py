@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import gradio as gr
 import os, glob
 os.environ["LD_PRELOAD"] = "/usr/lib/aarch64-linux-gnu/libgomp.so.1"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -48,20 +47,18 @@ def get_models():
     generator = JETSGenerator(conf)
     tokenizer = AutoTokenizer.from_pretrained(config.bert_path)
 
+    tone_color_converter = ToneColorConverter(f'./model_file/converter/config.json', device=DEVICE)
+
     with open(config.token_list_path, 'r') as f:
         token2id = {t.strip():idx for idx, t, in enumerate(f.readlines())}
 
     with open(config.speaker2id_path, encoding='utf-8') as f:
         speaker2id = {t.strip():idx for idx, t in enumerate(f.readlines())}
+    
+    g2p = G2p()
+    lexicon = read_lexicon()
 
-    return (style_encoder, generator, tokenizer, token2id, speaker2id)
-
-speakers = config.speakers
-models = get_models()
-g2p = G2p()
-lexicon = read_lexicon()
-tone_color_converter = ToneColorConverter(f'./model_file/converter/config.json', device=DEVICE)
-
+    return (style_encoder, generator, tokenizer, token2id, speaker2id), tone_color_converter, g2p, lexicon
 
 def get_style_embedding(prompt_text, tokenizer, style_encoder):
     prompt = tokenizer([prompt_text], padding='max_length', truncation=True, max_length=512, return_tensors="pt")
@@ -80,8 +77,7 @@ def get_style_embedding(prompt_text, tokenizer, style_encoder):
         style_embedding = output["pooled_output"].cpu().squeeze().numpy()
     return style_embedding
 
-
-def tts(text_content, emotion, speaker, models, output_path):
+def tts(text_content, emotion, speaker, output_path):
     text = g2p_cn_en(text_content, g2p, lexicon)
     (style_encoder, generator, tokenizer, token2id, speaker2id) = models
 
@@ -116,79 +112,10 @@ def tts(text_content, emotion, speaker, models, output_path):
 
 def tts_only(text_content, speaker, emotion):
     res_wav = f'./temp/speaker{speaker}-{uuid.uuid4()}.wav'
-    tts(text_content, emotion, speaker, models, res_wav)
+    tts(text_content, emotion, speaker, res_wav)
     return res_wav
 
-def predict(text_content, speaker, emotion, tgt_wav, agree):
-    # initialize a empty info
-    text_hint = ''
-    # agree with the terms
-    if agree == False:
-        text_hint += '[ERROR] Please accept the Terms & Condition!\n'
-        gr.Warning("Please accept the Terms & Condition!")
-        return (
-            text_hint,
-            None,
-            None,
-        )
-
-    if len(text_content) < 30:
-        text_hint += f"[ERROR] Please give a longer text \n"
-        gr.Warning("Please give a longer text")
-        return (
-            text_hint,
-            None,
-            None,
-        )
-
-    if len(text_content) > 200:
-        text_hint += f"[ERROR] Text length limited to 200 characters for this demo, please try shorter text. You can clone our open-source repo and try for your usage \n"
-        gr.Warning(
-            "Text length limited to 200 characters for this demo, please try shorter text. You can clone our open-source repo for your usage"
-        )
-        return (
-            text_hint,
-            None,
-            None,
-        )
-    src_wav = f'./temp/src-{speaker}.wav'
-    tts(text_content, emotion, speaker, models, src_wav)
-
-    try:
-        # extract the tone color features of the source speaker and target speaker
-        source_se, audio_name_src = get_se(src_wav, tone_color_converter, target_dir='processed', vad=True)
-        target_se, audio_name_tgt = get_se(tgt_wav, tone_color_converter, target_dir='processed', vad=True)
-    except Exception as e:
-        text_hint += f"[ERROR] Get source/target tone color error {str(e)} \n"
-        gr.Warning(
-            "[ERROR] Get source/target tone color error {str(e)} \n"
-        )
-        return (
-            text_hint,
-            None,
-            None,
-        )
-
-    save_path = './temp/output.wav'
-    # Run the tone color converter
-    encode_message = "@MyShell"
-    tone_color_converter.convert(
-        audio_src_path=src_wav, 
-        src_se=source_se, 
-        tgt_se=target_se, 
-        output_path=save_path,
-        message=encode_message)
-
-    text_hint += f'''Get response successfully \n'''
-
-    return (
-        text_hint,
-        src_wav,
-        save_path
-    )
-
-
-def convert_only(src_wav, tgt_wav, agree):
+def convert_only(src_wav, tgt_wav, agree=True):
     # initialize a empty info
     text_hint = ''
     # agree with the terms
@@ -233,81 +160,158 @@ def convert_only(src_wav, tgt_wav, agree):
         save_path
     )
 
+def predict(text_content, speaker, emotion, tgt_wav, agree):
+    # initialize a empty info
+    text_hint = ''
+    # agree with the terms
+    if agree == False:
+        text_hint += '[ERROR] Please accept the Terms & Condition!\n'
+        gr.Warning("Please accept the Terms & Condition!")
+        return (
+            text_hint,
+            None,
+            None,
+        )
 
-description = """
-# 😊😮😭Emoti Open Voice with AirBox💬
-"""
+    if len(text_content) < 30:
+        text_hint += f"[ERROR] Please give a longer text \n"
+        gr.Warning("Please give a longer text")
+        return (
+            text_hint,
+            None,
+            None,
+        )
 
-with gr.Blocks(analytics_enabled=False) as demo:
+    if len(text_content) > 200:
+        text_hint += f"[ERROR] Text length limited to 200 characters for this demo, please try shorter text. You can clone our open-source repo and try for your usage \n"
+        gr.Warning(
+            "Text length limited to 200 characters for this demo, please try shorter text. You can clone our open-source repo for your usage"
+        )
+        return (
+            text_hint,
+            None,
+            None,
+        )
 
-    with gr.Row():
-        with gr.Column():
+    src_wav = f'./temp/src-{speaker}.wav'
+    tts(text_content, emotion, speaker, src_wav)
+
+    try:
+        # extract the tone color features of the source speaker and target speaker
+        source_se, audio_name_src = get_se(src_wav, tone_color_converter, target_dir='processed', vad=True)
+        target_se, audio_name_tgt = get_se(tgt_wav, tone_color_converter, target_dir='processed', vad=True)
+    except Exception as e:
+        text_hint += f"[ERROR] Get source/target tone color error {str(e)} \n"
+        gr.Warning(
+            "[ERROR] Get source/target tone color error {str(e)} \n"
+        )
+        return (
+            text_hint,
+            None,
+            None,
+        )
+
+    save_path = './temp/output.wav'
+    # Run the tone color converter
+    encode_message = "@MyShell"
+    tone_color_converter.convert(
+        audio_src_path=src_wav, 
+        src_se=source_se, 
+        tgt_se=target_se, 
+        output_path=save_path,
+        message=encode_message)
+
+    text_hint += f'''Get response successfully \n'''
+
+    return (
+        text_hint,
+        src_wav,
+        save_path
+    )
+
+if __name__ == '__main__':
+
+    import gradio as gr
+
+    speakers = config.speakers
+
+    global models, tone_color_converter, g2p, lexicon
+    models, tone_color_converter, g2p, lexicon = get_models()
+
+    description = """
+    # 😊😮😭Emoti Open Voice with AirBox💬
+    """
+
+    with gr.Blocks(analytics_enabled=False) as demo:
+
+        with gr.Row():
+            with gr.Column():
+                with gr.Row():
+                    gr.Markdown(description)
+        with gr.Tab('TTS mode'):
             with gr.Row():
-                gr.Markdown(description)
-    with gr.Tab('TTS mode'):
-        with gr.Row():
-            with gr.Column():
-                speaker_gr = gr.Dropdown(choices=speakers, label="Speaker ID (说话人)")
-                emotion_gr = gr.Textbox(label="情感 (开心/悲伤)")
-                content_gr = gr.Textbox(label="需要合成的文本")
-                tts_button = gr.Button("生成", elem_id="send-btn", visible=True)
-            with gr.Column():
-                synthesize = gr.Audio(type="filepath")
-                tts_button.click(tts_only, [content_gr, speaker_gr, emotion_gr], outputs=[synthesize])
-    
-    with gr.Tab('TTS + Conversion mode'):
-        with gr.Row():
-            with gr.Column():
-                speaker_gr = gr.Dropdown(choices=speakers, label="原始说话人ID")
-                content_gr = gr.Textbox(
-                    label="文本内容",
-                    info="One or two sentences at a time is better. Up to 200 text characters.",
-                    value="You got a dream, you gotta protect it. People can't do something themselves, they wanna tell you you can't do it. If you want something, go get it. Period.",
-                )
-                emotion_gr = gr.Textbox(label="语调情感 (开心/悲伤/愤怒/惊讶/冷酷...)")
-                ref_gr = gr.Audio(
-                    label="目标音色",
-                    #info="点击上传目标音色的音频文件",
-                    type="filepath",
-                )
-                tos_gr = gr.Checkbox(
-                    label="Agree",
-                    value=True,
-                    info="I agree to the terms of the cc-by-nc-4.0 license-: https://github.com/myshell-ai/OpenVoice/blob/main/LICENSE",
-                )
+                with gr.Column():
+                    speaker_gr = gr.Dropdown(choices=speakers, label="Speaker ID (说话人)")
+                    emotion_gr = gr.Textbox(label="情感 (开心/悲伤)")
+                    content_gr = gr.Textbox(label="需要合成的文本")
+                    tts_button = gr.Button("生成", elem_id="send-btn", visible=True)
+                with gr.Column():
+                    synthesize = gr.Audio(type="filepath")
+                    tts_button.click(tts_only, [content_gr, speaker_gr, emotion_gr], outputs=[synthesize])
+        
+        with gr.Tab('TTS + Conversion mode'):
+            with gr.Row():
+                with gr.Column():
+                    speaker_gr = gr.Dropdown(choices=speakers, label="原始说话人ID")
+                    content_gr = gr.Textbox(
+                        label="文本内容",
+                        info="One or two sentences at a time is better. Up to 200 text characters.",
+                        value="You got a dream, you gotta protect it. People can't do something themselves, they wanna tell you you can't do it. If you want something, go get it. Period.",
+                    )
+                    emotion_gr = gr.Textbox(label="语调情感 (开心/悲伤/愤怒/惊讶/冷酷...)")
+                    ref_gr = gr.Audio(
+                        label="目标音色",
+                        #info="点击上传目标音色的音频文件",
+                        type="filepath",
+                    )
+                    tos_gr = gr.Checkbox(
+                        label="Agree",
+                        value=True,
+                        info="I agree to the terms of the cc-by-nc-4.0 license-: https://github.com/myshell-ai/OpenVoice/blob/main/LICENSE",
+                    )
 
-                tts_button = gr.Button("生成", elem_id="send-btn", visible=True)
+                    tts_button = gr.Button("生成", elem_id="send-btn", visible=True)
 
-            with gr.Column():
-                out_text_gr = gr.Text(label="Info")
-                src_audio_gr = gr.Audio(label="TTS Audio", autoplay=True)
-                tgt_audio_gr = gr.Audio(label="Target Audio", autoplay=True)
-                tts_button.click(predict, [content_gr, speaker_gr, emotion_gr, ref_gr, tos_gr], outputs=[out_text_gr, src_audio_gr, tgt_audio_gr])
+                with gr.Column():
+                    out_text_gr = gr.Text(label="Info")
+                    src_audio_gr = gr.Audio(label="TTS Audio", autoplay=True)
+                    tgt_audio_gr = gr.Audio(label="Target Audio", autoplay=True)
+                    tts_button.click(predict, [content_gr, speaker_gr, emotion_gr, ref_gr, tos_gr], outputs=[out_text_gr, src_audio_gr, tgt_audio_gr])
 
-    with gr.Tab('Conversion-only mode'):
-        with gr.Row():
-            with gr.Column():
-                cvt_src_gr = gr.Audio(
-                    label="Source Audio",
-                    #info="Click on the ✎ button to upload your own source speaker audio",
-                    type="filepath",
-                )
-                cvt_ref_gr = gr.Audio(
-                    label="Reference Audio",
-                    #info="Click on the ✎ button to upload your own target speaker audio",
-                    type="filepath",
-                )
-                cvt_tos_gr = gr.Checkbox(
-                    label="Agree",
-                    value=True,
-                    info="I agree to the terms of the cc-by-nc-4.0 license-: https://github.com/myshell-ai/OpenVoice/blob/main/LICENSE",
-                )
-                cvt_button = gr.Button("转换", elem_id="send-btn", visible=True)
-            with gr.Column():
-                out_text_gr = gr.Text(label="Info")
-                cvt_audio_gr = gr.Audio(label="Synthesised Audio", autoplay=True)
-                cvt_button.click(convert_only, [cvt_src_gr, cvt_ref_gr, cvt_tos_gr], outputs=[out_text_gr, cvt_audio_gr])
+        with gr.Tab('Conversion-only mode'):
+            with gr.Row():
+                with gr.Column():
+                    cvt_src_gr = gr.Audio(
+                        label="Source Audio",
+                        #info="Click on the ✎ button to upload your own source speaker audio",
+                        type="filepath",
+                    )
+                    cvt_ref_gr = gr.Audio(
+                        label="Reference Audio",
+                        #info="Click on the ✎ button to upload your own target speaker audio",
+                        type="filepath",
+                    )
+                    cvt_tos_gr = gr.Checkbox(
+                        label="Agree",
+                        value=True,
+                        info="I agree to the terms of the cc-by-nc-4.0 license-: https://github.com/myshell-ai/OpenVoice/blob/main/LICENSE",
+                    )
+                    cvt_button = gr.Button("转换", elem_id="send-btn", visible=True)
+                with gr.Column():
+                    out_text_gr = gr.Text(label="Info")
+                    cvt_audio_gr = gr.Audio(label="Synthesised Audio", autoplay=True)
+                    cvt_button.click(convert_only, [cvt_src_gr, cvt_ref_gr, cvt_tos_gr], outputs=[out_text_gr, cvt_audio_gr])
 
 
-demo.queue()  
-demo.launch(debug=True, show_api=True, share=False, server_name="0.0.0.0")
+    demo.queue()  
+    demo.launch(debug=True, show_api=True, share=False, server_name="0.0.0.0")

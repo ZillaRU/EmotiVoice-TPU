@@ -25,6 +25,7 @@ pip3 install -r requirements.txt
 
 python3 -m nltk.downloader averaged_perceptron_tagger_eng
 sudo apt-get install libsndfile1 -y
+mkdir -p ~/.cache/torch/hub/
 mv assets/master.zip ~/.cache/torch/hub/
 cd ~/.cache/torch/hub/
 unzip master.zip

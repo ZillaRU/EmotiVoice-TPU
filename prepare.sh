@@ -20,7 +20,10 @@ case "$(uname -m)" in
 esac
 
 # 安装 tpu-perf
-pip3 install "$WHL_URL"
+if ! python3 -c "import tpu_perf" &> /dev/null; then
+    echo "tpu_perf could not be found, installing..."
+    pip3 install "$WHL_URL"
+fi
 pip3 install -r requirements.txt
 
 python3 -m nltk.downloader averaged_perceptron_tagger_eng
